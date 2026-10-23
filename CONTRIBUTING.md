@@ -120,7 +120,7 @@ def add_rul(df: pd.DataFrame, cap: int | None = None) -> pd.DataFrame:
 
 # src/rul/split.py  (#2, Sarvesh)
 def engine_split(df, val_frac=0.2, seed=42) -> tuple[pd.DataFrame, pd.DataFrame]: ...
-def engine_folds(df, n_splits=5):  # yields (train_idx, val_idx), grouped by unit
+def engine_folds(df, n_splits=5) -> list:  # (train_idx, val_idx) pairs, grouped by unit
 def last_cycle(df) -> pd.DataFrame:  # one row per unit, its final cycle
 
 # src/rul/features.py  (#4, Aryan)

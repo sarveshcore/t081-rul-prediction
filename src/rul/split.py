@@ -15,12 +15,12 @@ def engine_split(
     return df[~is_val], df[is_val]
 
 
-def engine_folds(df: pd.DataFrame, n_splits: int = 5):
-    """Yield positional (train_idx, val_idx) for GroupKFold grouped by unit."""
-    yield from GroupKFold(n_splits=n_splits).split(df, groups=df["unit"])
+def engine_folds(df: pd.DataFrame, n_splits: int = 5) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Return positional (train_idx, val_idx) pairs for GroupKFold grouped by unit, reusable."""
+    return list(GroupKFold(n_splits=n_splits).split(df, groups=df["unit"]))
 
 
 def last_cycle(df: pd.DataFrame) -> pd.DataFrame:
     """Return one row per unit, taken at that unit's final cycle."""
-    last = df.loc[df.groupby("unit")["cycle"].idxmax()]
-    return last.sort_values("unit").reset_index(drop=True)
+    last = df.sort_values(["unit", "cycle"]).groupby("unit").tail(1)
+    return last.reset_index(drop=True)

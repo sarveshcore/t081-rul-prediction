@@ -65,3 +65,18 @@ def test_last_cycle(df):
     expected = df.groupby("unit")["cycle"].max().to_numpy()
     np.testing.assert_array_equal(last.cycle.to_numpy(), expected)
     assert list(last.index) == list(range(len(UNITS)))
+
+
+def test_folds_can_be_reused(df):
+    folds = engine_folds(df, n_splits=5)
+    first = [tuple(val) for _, val in folds]
+    second = [tuple(val) for _, val in folds]
+    assert len(first) == 5
+    assert first == second
+
+
+def test_last_cycle_ignores_duplicate_index(df):
+    doubled = pd.concat([df.iloc[:20], df.iloc[20:]])
+    doubled.index = [0] * len(doubled)
+    last = last_cycle(doubled)
+    assert list(last.unit) == UNITS

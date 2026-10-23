@@ -18,8 +18,10 @@ def _rmse_mae(error: np.ndarray) -> tuple[float, float]:
 
 def evaluate(y_true, y_pred, late_cut: int = 50) -> dict:
     """Return rmse, mae, nasa_score and rmse/mae for early (> late_cut) and late stages."""
-    y_true = np.asarray(y_true, dtype=float)
-    y_pred = np.asarray(y_pred, dtype=float)
+    y_true = np.ravel(np.asarray(y_true, dtype=float))
+    y_pred = np.ravel(np.asarray(y_pred, dtype=float))
+    if y_true.shape != y_pred.shape:
+        raise ValueError(f"y_true has {y_true.size} values but y_pred has {y_pred.size}")
     error = y_pred - y_true
     late = y_true <= late_cut
     rmse, mae = _rmse_mae(error)

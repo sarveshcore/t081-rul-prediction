@@ -62,3 +62,13 @@ def test_accepts_series_with_index():
     from_series = evaluate(true, pred)
     from_arrays = evaluate(np.array([10, 40, 60, 100]), np.array([20, 40, 60, 90]))
     assert from_series == pytest.approx(from_arrays)
+
+
+def test_accepts_column_vector_predictions():
+    m = evaluate([10, 40, 60, 100], [[20], [40], [60], [90]])
+    assert m["rmse"] == pytest.approx(math.sqrt(50))
+
+
+def test_rejects_length_mismatch():
+    with pytest.raises(ValueError):
+        evaluate([10, 20, 30], [12])

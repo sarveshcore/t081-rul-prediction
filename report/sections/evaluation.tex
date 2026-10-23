@@ -12,8 +12,10 @@ validation set. The model would then be scored on near copies of rows it had
 already seen, and the validation error would understate the error on a new
 engine. We therefore split by engine: every row of a given \texttt{unit} lies
 on one side of the split only. Hyperparameters are tuned with five fold
-\texttt{GroupKFold} cross validation grouped on \texttt{unit}, with a fixed
-seed of 42. The test set is used once, after all hyperparameters are frozen.
+\texttt{GroupKFold} cross validation grouped on \texttt{unit}, which assigns
+engines to folds deterministically without shuffling. A single holdout split,
+used for quick checks, draws 20\% of the engines with seed 42. The test set
+is used once, after all hyperparameters are frozen.
 
 \subsection{Scoring on test engines}
 Training engines run to failure, but each test engine is cut off at an
