@@ -3,6 +3,7 @@
 import pandas as pd
 import pytest
 
+from rul import data
 from rul.data import add_rul, load_fd
 
 
@@ -52,3 +53,16 @@ def test_training_engines_reach_zero_and_decrease_each_cycle():
 def test_unknown_subset_is_rejected():
     with pytest.raises(ValueError, match="FD001"):
         load_fd("FD999")
+
+
+@pytest.mark.parametrize("extra_field", [False, True])
+def test_load_fd_rejects_wrong_trajectory_width(tmp_path, monkeypatch, extra_field):
+    valid_row = "1 1 " + "0 " * 24
+    bad_row = valid_row + "0 " if extra_field else "1 1 " + "0 " * 23
+    (tmp_path / "train_FD001.txt").write_text(bad_row + "\n")
+    (tmp_path / "test_FD001.txt").write_text(valid_row + "\n")
+    (tmp_path / "RUL_FD001.txt").write_text("5\n")
+    monkeypatch.setattr(data, "_RAW_DIR", tmp_path)
+
+    with pytest.raises(ValueError, match="26 columns"):
+        load_fd()

@@ -17,14 +17,17 @@ def load_fd(subset: str = "FD001") -> tuple[pd.DataFrame, pd.DataFrame, pd.Serie
     if subset != "FD001":
         raise ValueError("Only FD001 is available; expected subset='FD001'")
 
-    train = pd.read_csv(_RAW_DIR / f"train_{subset}.txt", sep=r"\s+", header=None, names=_COLUMNS)
-    test = pd.read_csv(_RAW_DIR / f"test_{subset}.txt", sep=r"\s+", header=None, names=_COLUMNS)
+    train = pd.read_csv(_RAW_DIR / f"train_{subset}.txt", sep=r"\s+", header=None)
+    test = pd.read_csv(_RAW_DIR / f"test_{subset}.txt", sep=r"\s+", header=None)
     test_targets = pd.read_csv(_RAW_DIR / f"RUL_{subset}.txt", sep=r"\s+", header=None)
 
     if train.shape[1] != len(_COLUMNS) or test.shape[1] != len(_COLUMNS):
         raise ValueError(f"{subset} trajectory files must each have {len(_COLUMNS)} columns")
     if test_targets.shape[1] != 1:
         raise ValueError(f"{subset} test RUL file must have one column")
+
+    train.columns = _COLUMNS
+    test.columns = _COLUMNS
 
     units = sorted(test["unit"].unique())
     if len(units) != len(test_targets):
