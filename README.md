@@ -24,6 +24,8 @@ engine, at its last observed cycle.
 
 ## Reproduce
 
+Needs Python 3.12 or newer.
+
 ```sh
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
