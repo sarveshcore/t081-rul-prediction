@@ -20,6 +20,11 @@ Read this once before your first pull request. It is short on purpose.
 8. **Write your report section and your viva notes** as part of your work,
    not at the end. Every issue lists the section you own.
 
+## Finding your work
+
+Every issue has an `owner: <name>` label. Filter the issue list by your
+label, for example `label:"owner: aryan"`.
+
 ## Daily rhythm
 
 - Post a one line update in the group chat by **10 pm**: what merged, what

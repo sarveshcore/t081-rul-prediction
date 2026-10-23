@@ -49,7 +49,8 @@ is merged and switch to the EDA's sensor list when it lands.
 - **Split by engine**, never by row. Tuning uses 5 fold GroupKFold on `unit`.
 - **The test set is used once**, in #6, after hyperparameters are frozen.
 - **RUL is capped at 125 for training** and the cap is justified in #3.
-  Test scoring uses the true RUL from `RUL_FD001.txt`.
+  #5 also reports one uncapped run as evidence. Test scoring uses the true
+  RUL from `RUL_FD001.txt`.
 - **Early vs late stage:** late means true RUL of 50 cycles or fewer.
 - **Seed 42** everywhere.
 
