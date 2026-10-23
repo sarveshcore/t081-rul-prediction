@@ -1,0 +1,53 @@
+% ABOUTME: Evaluation protocol section of the IEEE report (issue #2).
+% ABOUTME: Engine level splitting, leakage, metric definitions and the early vs late stage split.
+\section{Evaluation Protocol}
+\label{sec:evaluation}
+
+\subsection{Splitting by engine}
+Each training engine in FD001 contributes one row per operating cycle, and
+consecutive cycles of the same engine differ only by a small amount of
+degradation and sensor noise. If rows were split at random, cycle $t$ of an
+engine could fall in the training set while cycle $t+1$ fell in the
+validation set. The model would then be scored on near copies of rows it had
+already seen, and the validation error would understate the error on a new
+engine. We therefore split by engine: every row of a given \texttt{unit} lies
+on one side of the split only. Hyperparameters are tuned with five fold
+\texttt{GroupKFold} cross validation grouped on \texttt{unit}, with a fixed
+seed of 42. The test set is used once, after all hyperparameters are frozen.
+
+\subsection{Scoring on test engines}
+Training engines run to failure, but each test engine is cut off at an
+unknown point before failure, and the dataset gives the true RUL only at its
+last observed cycle. Each test engine is therefore scored once, using the
+prediction at its final cycle, so all 100 test engines carry equal weight.
+
+\subsection{Metrics}
+Let $y_i$ be the true RUL of engine $i$, $\hat{y}_i$ the prediction,
+$d_i = \hat{y}_i - y_i$ the error and $n$ the number of engines. We report
+\begin{align}
+\mathrm{RMSE} &= \sqrt{\tfrac{1}{n}\textstyle\sum_{i} d_i^2}, \qquad
+\mathrm{MAE} = \tfrac{1}{n}\textstyle\sum_{i} \lvert d_i \rvert, \\
+S &= \sum_{i} s_i, \quad
+s_i =
+\begin{cases}
+e^{-d_i/13} - 1, & d_i < 0,\\
+e^{d_i/10} - 1, & d_i \ge 0,
+\end{cases}
+\end{align}
+where $S$ is the asymmetric scoring function of the PHM08 challenge
+\cite{saxena2008damage}. RMSE penalises large errors more than MAE does,
+and both treat early and late predictions alike. The score $S$ does not: a
+prediction that overestimates RUL by 10 cycles costs as much as one that
+underestimates it by 13, and the penalty grows exponentially. Overestimating
+RUL means the engine is believed healthy when it is close to failure, which
+risks an in service failure; underestimating it only brings maintenance
+forward. Because $S$ is a sum rather than a mean, it is compared only across
+models scored on the same set of engines.
+
+\subsection{Early and late stage error}
+Maintenance decisions are made near the end of an engine's life, so error
+there matters more than error far from failure. We split the test engines by
+true RUL into a late stage ($y_i \le 50$ cycles) and an early stage
+($y_i > 50$) and report RMSE and MAE for each. A model with a good overall
+RMSE but a poor late stage RMSE would be of little use for scheduling
+maintenance.
