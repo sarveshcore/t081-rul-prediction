@@ -32,7 +32,9 @@ pip install -e ".[dev]"
 pytest
 ```
 
-Then run the notebooks in `notebooks/` in numeric order.
+Then `make all` runs ruff, pytest and every notebook in `notebooks/` in numeric order,
+regenerating `results/` and `figures/`. It stops at the first notebook that fails.
+Without `make` (for example on Windows), run the notebooks by hand in numeric order.
 
 ## Layout
 
