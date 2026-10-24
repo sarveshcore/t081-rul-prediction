@@ -1,0 +1,9 @@
+check,value
+rows,20631
+raw_columns,26
+engines,100
+missing_cells,0
+duplicate_rows,0
+duplicate_unit_cycles,0
+engines_not_starting_at_1,0
+nonconsecutive_cycle_steps,0

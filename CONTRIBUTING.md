@@ -112,6 +112,8 @@ change one, say so in your PR and tag whoever uses it.
 SENSORS: list[str]          # "s_1" ... "s_21"
 SETTINGS: list[str]         # "setting_1" ... "setting_3"
 USEFUL_SENSORS: list[str]   # set by the EDA in #3
+def load_train_fd(subset: str = "FD001") -> pd.DataFrame:
+    """Read training trajectories only; use for EDA without opening either test file."""
 def load_fd(subset: str = "FD001") -> tuple[pd.DataFrame, pd.DataFrame, pd.Series]:
     """Return (train, test, test_rul). Columns: unit, cycle, settings, sensors.
     test_rul is indexed by unit: true RUL at that unit's last test cycle."""

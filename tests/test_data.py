@@ -66,3 +66,19 @@ def test_load_fd_rejects_wrong_trajectory_width(tmp_path, monkeypatch, extra_fie
 
     with pytest.raises(ValueError, match="26 columns"):
         load_fd()
+
+
+def test_load_train_fd_works_without_test_files(tmp_path, monkeypatch):
+    """EDA must be able to load training data without opening either test file."""
+    (tmp_path / "train_FD001.txt").write_text("1 1 " + "0 " * 24 + "\n")
+    monkeypatch.setattr(data, "_RAW_DIR", tmp_path)
+    train = data.load_train_fd()
+    assert train.shape == (1, 26)
+    assert train.loc[0, "unit"] == 1
+    assert train.loc[0, "cycle"] == 1
+    assert train.loc[0, "s_21"] == 0
+
+
+def test_load_train_fd_rejects_unknown_subset():
+    with pytest.raises(ValueError, match="FD001"):
+        data.load_train_fd("FD999")
