@@ -12,6 +12,6 @@ Closes #
 
 - [ ] `pytest` passes and `ruff check .` is clean
 - [ ] Notebooks run from a fresh kernel
-- [ ] No test set use outside #6
+- [ ] No test set use outside #6 except the approved final descriptive #3 plots
 - [ ] Report section for this issue updated
 - [ ] I can explain every line of this PR in the viva

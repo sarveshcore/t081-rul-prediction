@@ -11,7 +11,11 @@ Read this once before your first pull request. It is short on purpose.
 3. **Sarvesh reviews and merges.** You do not merge your own PR. Sarvesh's
    own PRs are reviewed by any teammate.
 4. **Never use the test set** (`test_FD001.txt`, `RUL_FD001.txt`) for anything
-   except #6. Tuning uses cross validation on the training engines only.
+   except #6 and the narrow #3 exception approved in
+   [Sarvesh's PR #19 review](https://github.com/sarveshcore/t081-rul-prediction/pull/19#pullrequestreview-5639607879):
+   a final cell may plot last observed test cycles and true test RUL after all
+   training decisions. These are descriptive only; no earlier choice is revisited.
+   Tuning uses cross validation on the training engines only.
 5. **Split by engine (`unit`), never by row.** Rolling windows never cross
    from one engine into another.
 6. **Seed 42** for every random thing.
@@ -144,6 +148,6 @@ The PR template repeats this. Before you ask for review:
 
 - [ ] `pytest` passes and `ruff check .` is clean
 - [ ] Notebooks run from a fresh kernel
-- [ ] No test set use outside #6
+- [ ] No test set use outside #6 except the approved final descriptive #3 plots
 - [ ] Report section for this issue updated
 - [ ] I can explain every line of this PR in the viva

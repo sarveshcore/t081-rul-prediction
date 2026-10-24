@@ -4,7 +4,7 @@
 
 Issue #1 added the original NASA FD001 files, the loader, correct training
 RUL targets, validation tests and source documentation. Issue #3 adds a
-training-only EDA notebook, five report figures, CSV evidence tables, sensor
+EDA notebook with training-only decisions, six report figures, CSV evidence tables, sensor
 selection, the dataset/EDA report section and these explanations.
 
 `load_fd()` returns `(train, test, test_rul)`; `load_train_fd()` opens only the
@@ -25,9 +25,10 @@ comes from the supplied labels, never from `add_rul(test)`.
 - The exact constants are s_1, s_5, s_10, s_16, s_18 and s_19. Unique-value
   counts establish this even when floating-point std is slightly above zero.
 - s_6 has only 21.60 (406 rows) and 21.61 (20,225 rows), a 98.03% dominant
-  value and std about 0.001389. We drop a two-value sensor when its dominant
-  fraction is at least 98%. This is a documented simplification, not a proof
-  of zero predictive value. A low raw std alone is insufficient because
+  value and std about 0.001389. The share is descriptive, not a cutoff.
+  Its narrow two-level range is consistent with rounding at recorded precision;
+  excluding it matches Liu et al. (2021), Section 4.2, and their 14-sensor set.
+  This does not prove zero predictive value. A low raw std alone is insufficient because
   sensors use different units. s_17 has 13 distinct values and is retained.
 - The retained list has 14 sensors: 2, 3, 4, 7, 8, 9, 11, 12, 13, 14, 15,
   17, 20 and 21. It is exported in `USEFUL_SENSORS` and checked against the
@@ -41,7 +42,7 @@ comes from the supplied labels, never from `add_rul(test)`.
   Section 4.2, use the same upper limit (DOI: 10.1007/s44196-021-00020-1).
   Early sensor trends are often flatter; this motivates, but does not prove
   the optimality of, a capped target. Issue #5 compares an uncapped run.
-- Correlations use uncapped training RUL. They are pooled, row-weighted
+- Correlations include both uncapped and 125-capped training RUL. They are pooled, row-weighted
   associations, not causal relationships or independent observations.
 
 ## Explain each figure
@@ -56,6 +57,9 @@ comes from the supplied labels, never from `add_rul(test)`.
    noisier or flatter early histories and stronger late directional changes.
 5. `eda_correlations.png`: several sensors share variation and correlate
    with remaining life; model evaluation decides how useful that is.
+
+6. `eda_test_diagnostics.png`: last observed test cycle per engine and supplied
+   true-RUL distribution, added last without revisiting any earlier decision.
 
 ## Ten likely questions
 
@@ -82,16 +86,14 @@ comes from the supplied labels, never from `add_rul(test)`.
 9. **Does correlation prove a sensor causes failure?** No. It is descriptive,
    can reflect shared degradation and between-engine effects, and misses
    nonlinear or temporal relationships.
-10. **How did you avoid test leakage?** This notebook only calls the training
-    loader. Sensor choice and cap rationale use no test observations or
-    labels. Model scalers must be fitted inside training folds; neighboring
+10. **How did you avoid test leakage?** Sensor choice and cap rationale use only the
+    training loader. The final cell opens test files for the two descriptive
+    plots Sarvesh approved; no earlier choice was revisited. Model scalers must be fitted inside training folds; neighboring
     cycles from an engine must not be split across training and validation.
 
-## Deferred checklist item
+## Review-approved test diagnostics
 
-Issue #3 requests test-truncation and true-test-RUL plots, but CONTRIBUTING.md
-and ROADMAP.md reserve test-set analysis for issue #6. The notebook explicitly
-defers them. At final evaluation, use the supplied RUL and last observed cycle
-to plot `last_cycle / (last_cycle + test_rul)`. This is a fraction of the
-recorded trajectory horizon, not physical engine age, because initial wear
-is unknown. Do not use those plots to revise the frozen model choices.
+The final cell uses `load_fd()`, counts each engine once, and joins supplied true
+RUL to its last observed cycle by engine ID. It never calls `add_rul(test)` or caps
+test labels. Last observed cycle is not the failure cycle or physical engine age.
+Model evaluation remains in issue #6; these plots must not guide tuning.

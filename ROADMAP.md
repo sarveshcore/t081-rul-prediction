@@ -47,7 +47,9 @@ is merged and switch to the EDA's sensor list when it lands.
 
 - **FD001 only** for Phase 1. FD002 to FD004 are a stretch goal.
 - **Split by engine**, never by row. Tuning uses 5 fold GroupKFold on `unit`.
-- **The test set is used once**, in #6, after hyperparameters are frozen.
+- **Test model performance is evaluated once**, in #6, after hyperparameters
+  are frozen. The approved final descriptive plots in #3 do not guide any
+  earlier choice (see CONTRIBUTING.md for the PR #19 review exception).
 - **RUL is capped at 125 for training** and the cap is justified in #3.
   #5 also reports one uncapped run as evidence. Test scoring uses the true
   RUL from `RUL_FD001.txt`.

@@ -4,7 +4,7 @@ import pandas as pd
 
 
 def sensor_summary(df: pd.DataFrame, sensors: list[str]) -> pd.DataFrame:
-    """Summarize variation and apply the documented training-only sensor-selection rule."""
+    """Summarize sensor variation without imposing a sensor-selection threshold."""
     values = df[sensors]
     summary = pd.DataFrame({
         "mean": values.mean(),
@@ -16,8 +16,4 @@ def sensor_summary(df: pd.DataFrame, sensors: list[str]) -> pd.DataFrame:
     })
     summary.index.name = "sensor"
     summary["relative_std"] = summary["std"] / summary["mean"].abs().replace(0, float("nan"))
-    summary["decision"] = "keep"
-    summary.loc[summary["n_unique"] == 1, "decision"] = "drop: constant"
-    binary = (summary["n_unique"] == 2) & (summary["dominant_fraction"] >= 0.98)
-    summary.loc[binary, "decision"] = "drop: near-constant binary"
     return summary
