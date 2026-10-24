@@ -1,0 +1,150 @@
+% ABOUTME: Feature engineering section of the IEEE report (issue #4).
+% ABOUTME: Rolling statistics, least squares slope, regime normalisation, health index, ablation.
+\section{Degradation Features}
+\label{sec:features}
+
+Each FD001 row is one cycle of one engine: the cycle number, three
+operating settings and 21 sensor readings. A single reading is noisy and
+says little about how far an engine has degraded, so we add features that
+summarise each sensor's recent history. All features are computed by
+\texttt{make\_features} in \texttt{src/rul/features.py}, which returns one
+row per input row with the original index. Every window is computed within
+a single engine (grouped by \texttt{unit} and ordered by cycle), so no
+feature ever mixes readings from two engines.
+
+\subsection{Cycle}
+The cycle number $t$ is kept unchanged as a feature. It is the time since
+the engine entered service in the dataset, so on its own it is a weak prior
+on wear. It is not scaled, since tree models are invariant to monotone
+rescaling and downstream code uses the raw cycle.
+
+\subsection{Operating regime normalisation}
+Sensor levels depend on the flight condition (altitude, Mach number and
+throttle angle) as much as on wear. We standardise the three settings and
+cluster them with $k$-means (seed 42) into $K$ operating regimes. For each
+regime $r$ and sensor $j$ we store the mean $\mu_{rj}$ and standard
+deviation $\sigma_{rj}$ over the training rows in that regime, and
+normalise
+\begin{equation}
+z_{t,j} = \frac{x_{t,j} - \mu_{r(t),j}}{\sigma_{r(t),j}},
+\end{equation}
+where $r(t)$ is the regime nearest to the row's settings. FD001 runs in one
+regime ($K = 1$), so this is an ordinary z-score; with $K = 6$ the same code
+removes the regime offsets of FD002 and FD004, leaving variation due to
+wear. Sensors that are constant in FD001 (s\_1, s\_5, s\_10, s\_16, s\_18,
+s\_19) have $\sigma = 0$ up to floating point noise; they are only centred,
+so their features are zero rather than amplified noise.
+
+The cluster centres and $(\mu, \sigma)$ are estimated on training engines
+only and stored in a scaler object that is reused, unchanged, on
+validation and test engines. If they were re-estimated on the validation
+engines, the validation features would be scaled by statistics that
+include those engines' own failure trajectories, and the cross validated
+error would be optimistic. In cross validation the scaler is refitted in
+every fold on that fold's training engines.
+
+\subsection{Rolling mean and standard deviation}
+For window length $w \in \{5, 10, 20\}$ and the set $W_t$ of the last
+$\min(w, t)$ cycles of the same engine, with $n = |W_t|$,
+\begin{equation}
+m^{(w)}_{t,j} = \frac{1}{n}\sum_{s \in W_t} z_{s,j}, \qquad
+s^{(w)}_{t,j} = \sqrt{\frac{1}{n - 1}\sum_{s \in W_t}
+\bigl(z_{s,j} - m^{(w)}_{t,j}\bigr)^2}.
+\end{equation}
+The mean filters measurement noise and estimates the current level of
+degradation; the standard deviation measures how erratic the sensor has
+become, which tends to grow as components wear.
+
+\paragraph{Early cycles} The first $w - 1$ cycles of an engine have fewer
+than $w$ past readings. Rather than drop these rows or leave missing values,
+the window is truncated to the cycles seen so far (\texttt{min\_periods=1}).
+At cycle 1 the mean equals the reading and the standard deviation, undefined
+for one value, is set to 0. These features are therefore noisier for the
+first $w - 1$ cycles of each engine. Those cycles are at least 109 cycles
+from failure in FD001, where the target is at or near the cap of 125, so
+this costs little accuracy.
+
+\subsection{Rolling least squares slope}
+The slope is the ordinary least squares gradient of $z_{s,j}$ against cycle
+$s$ over the same window. With $n$ points and sums taken over $W_t$,
+\begin{equation}
+b^{(w)}_{t,j} =
+\frac{n \sum s\, z_{s,j} - \sum s \sum z_{s,j}}
+     {n \sum s^2 - \bigl(\sum s\bigr)^2}.
+\end{equation}
+All five sums are rolling sums, so every slope is computed in closed form
+in one pass instead of fitting a regression per row. For $n = 1$ the
+denominator is zero and we define $b = 0$: a single point has no trend.
+
+The slope is the local rate of degradation, in standard deviations per
+cycle. The rolling mean says how worn an engine is; the slope says how fast
+it is wearing. In FD001 the sensors drift slowly for most of an engine's
+life and then accelerate as the fault develops, so a steep slope marks an
+engine in the final phase of its life even when its sensor levels overlap
+with those of a healthy engine of a different build. Because the slope uses
+differences within one engine, it is also insensitive to the engine to
+engine offsets in initial wear that make raw levels hard to compare. On a
+window of 2 or 3 points the slope is dominated by noise, which is the main
+cost of the truncated early windows.
+
+\subsection{Health index}
+The health index (HI) combines all normalised sensors into one number
+between 0 and 1. We fit a linear regression on training engines,
+\begin{equation}
+h_t = 1 - \frac{t - 1}{T - 1}, \qquad
+\widehat{\mathrm{HI}}_t = \mathrm{clip}\bigl(\beta_0 + \boldsymbol\beta^\top
+\mathbf{z}_t,\ 0,\ 1\bigr),
+\end{equation}
+where $T$ is the engine's failure cycle, so the target $h$ falls linearly
+from 1 at the first cycle to 0 at failure. At prediction time no $T$ is
+needed: the fitted coefficients map any engine's sensors to an HI. We chose
+regression over the first principal component because PCA finds the
+direction of greatest variance, which need not be the direction of wear,
+and its sign and scale are arbitrary; the regression picks the sensor
+combination that tracks degradation directly and has a fixed 0 to 1 scale.
+Its limitation is the linear target: real wear is flat for most of a life
+and then accelerates, so the HI starts near 0.8 rather than 1 and only
+falls clearly in the last third of life. On FD001 the HI has a correlation
+of 0.86 with the capped RUL, higher than any single sensor (at most 0.80 in
+absolute value for a 20 cycle rolling mean).
+
+\subsection{Ablation}
+Table~\ref{tab:feature-ablation} adds the feature families one at a time
+to a Random Forest (default hyperparameters, seed 42), scored with five
+fold cross validation grouped by engine on every validation cycle.
+
+\begin{table}[t]
+\centering
+\caption{Feature ablation, 5 fold engine cross validation on FD001 training
+engines (mean over folds, RUL capped at 125).}
+\label{tab:feature-ablation}
+\begin{tabular}{lrrrr}
+\hline
+Features & $n$ & RMSE & MAE & Late RMSE \\
+\hline
+Cycle and raw sensors      &  22 & 16.81 & 11.53 & 15.56 \\
++ rolling mean and std     & 148 & 16.35 & 11.02 & 13.87 \\
++ rolling slope            & 211 & 14.78 & 10.02 & 11.35 \\
++ health index             & 212 & 14.72 &  9.94 & 11.22 \\
+\hline
+\end{tabular}
+\end{table}
+
+Smoothing helps a little: a forest already averages over many noisy rows.
+The slope gives the largest gain, about 1.6 RMSE and 2.5 late stage RMSE,
+well beyond the fold to fold standard deviation of 0.5 to 0.8. The HI adds
+a further small gain within that noise, since it is a linear combination of
+sensors the forest already sees; its main value is as one interpretable
+degradation signal.
+
+\subsection{Limitation of fixed windows}
+Every feature here looks back at most 20 cycles, while FD001 engines run
+for 128 to 362 cycles. A fixed window cannot tell whether a sensor has been
+drifting for 150 cycles or has just started to move, cannot see when the
+drift began to accelerate, and must use one window length for engines that
+degrade at very different rates. Lengthening the window trades this
+against slower response and longer truncated starts, and the choice of
+windows (5, 10, 20) is itself a hand-tuned hyperparameter. These are the
+gaps that motivate Phase 2: sequence models such as LSTMs or temporal
+convolutions take the whole trajectory as input and learn which part of
+the history matters, rather than relying on fixed hand-made summaries.
