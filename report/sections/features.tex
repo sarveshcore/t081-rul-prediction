@@ -47,9 +47,9 @@ every fold on that fold's training engines.
 For window length $w \in \{5, 10, 20\}$ and the set $W_t$ of the last
 $\min(w, t)$ cycles of the same engine, with $n = |W_t|$,
 \begin{equation}
-m^{(w)}_{t,j} = \frac{1}{n}\sum_{s \in W_t} z_{s,j}, \qquad
-s^{(w)}_{t,j} = \sqrt{\frac{1}{n - 1}\sum_{s \in W_t}
-\bigl(z_{s,j} - m^{(w)}_{t,j}\bigr)^2}.
+m^{(w)}_{t,j} = \frac{1}{n}\sum_{\tau \in W_t} z_{\tau,j}, \qquad
+\sigma^{(w)}_{t,j} = \sqrt{\frac{1}{n - 1}\sum_{\tau \in W_t}
+\bigl(z_{\tau,j} - m^{(w)}_{t,j}\bigr)^2}.
 \end{equation}
 The mean filters measurement noise and estimates the current level of
 degradation; the standard deviation measures how erratic the sensor has
@@ -65,12 +65,12 @@ from failure in FD001, where the target is at or near the cap of 125, so
 this costs little accuracy.
 
 \subsection{Rolling least squares slope}
-The slope is the ordinary least squares gradient of $z_{s,j}$ against cycle
-$s$ over the same window. With $n$ points and sums taken over $W_t$,
+The slope is the ordinary least squares gradient of $z_{\tau,j}$ against
+cycle $\tau$ over the same window. With $n$ points and sums taken over $W_t$,
 \begin{equation}
 b^{(w)}_{t,j} =
-\frac{n \sum s\, z_{s,j} - \sum s \sum z_{s,j}}
-     {n \sum s^2 - \bigl(\sum s\bigr)^2}.
+\frac{n \sum \tau\, z_{\tau,j} - \sum \tau \sum z_{\tau,j}}
+     {n \sum \tau^2 - \bigl(\sum \tau\bigr)^2}.
 \end{equation}
 All five sums are rolling sums, so every slope is computed in closed form
 in one pass instead of fitting a regression per row. For $n = 1$ the
@@ -104,14 +104,19 @@ and its sign and scale are arbitrary; the regression picks the sensor
 combination that tracks degradation directly and has a fixed 0 to 1 scale.
 Its limitation is the linear target: real wear is flat for most of a life
 and then accelerates, so the HI starts near 0.8 rather than 1 and only
-falls clearly in the last third of life. On FD001 the HI has a correlation
-of 0.86 with the capped RUL, higher than any single sensor (at most 0.80 in
-absolute value for a 20 cycle rolling mean).
+falls clearly in the last third of life. Fitted on each cross validation
+fold's training engines and evaluated on its validation engines, the HI has
+an out of fold correlation of $0.87 \pm 0.02$ with the capped RUL (0.86 in
+sample, so the fit does not overfit). For comparison, the strongest single
+feature, a 20 cycle rolling mean, reaches $|r| = 0.80$ in sample.
 
 \subsection{Ablation}
 Table~\ref{tab:feature-ablation} adds the feature families one at a time
-to a Random Forest (default hyperparameters, seed 42), scored with five
-fold cross validation grouped by engine on every validation cycle.
+to a Random Forest, scored with five fold cross validation grouped by
+engine on every validation cycle. The forest uses default hyperparameters
+(seed 42) as a stand-in until the tuned forest of the model section
+is available; the table will be rerun with that model so the two sections
+agree.
 
 \begin{table}[t]
 \centering

@@ -19,9 +19,10 @@ def norm_col(sensor: str) -> str:
 
 
 def feature_groups(sensors: list[str], windows: tuple[int, ...] = (5, 10, 20)) -> dict:
-    """Map each feature family to its column names, in the order make_features adds them."""
+    """Map each feature family to its column names; every family but raw is added by make_features."""
     return {
         "raw": ["cycle", *sensors],
+        "regime": ["regime"],
         "norm": [norm_col(s) for s in sensors],
         "rolling": [f"{s}_{stat}_{w}" for w in windows for s in sensors for stat in ("mean", "std")],
         "slope": [f"{s}_slope_{w}" for w in windows for s in sensors],
@@ -89,6 +90,9 @@ class FeatureScaler:
 
         added = pd.concat([pd.Series(regime, name="regime"), normed, rolled,
                            pd.Series(health, name="health_index")], axis=1)
+        clash = added.columns.intersection(df.columns)
+        if len(clash):
+            raise ValueError(f"df already has feature columns, e.g. {list(clash[:3])}")
         added = added.iloc[np.argsort(order)].set_axis(df.index)
         return pd.concat([df, added], axis=1)
 
@@ -125,11 +129,15 @@ def _rolling_features(unit: pd.Series, cycle: pd.Series, normed: pd.DataFrame,
 
 
 def make_features(df: pd.DataFrame, sensors: list[str], windows: tuple[int, ...] = (5, 10, 20),
-                  scaler: object | None = None, n_regimes: int = 1
+                  scaler: object | None = None, n_regimes: int | None = None
                   ) -> tuple[pd.DataFrame, object]:
-    """Same rows as df, plus engineered columns; fits the scaler if None, else applies it."""
+    """Same rows as df plus features; rolling stats, slopes and HI use regime normalised sensors."""
+    # No scaler: fit one on df (training engines only). Given a scaler: apply it, never refit.
     if scaler is None:
-        scaler = FeatureScaler.fit(df, sensors, windows, n_regimes=n_regimes)
+        scaler = FeatureScaler.fit(df, sensors, windows, n_regimes=n_regimes or 1)
     elif list(sensors) != scaler.sensors or tuple(windows) != scaler.windows:
         raise ValueError("sensors and windows must match the ones the scaler was fitted with")
+    elif n_regimes is not None and n_regimes != scaler.kmeans.n_clusters:
+        raise ValueError(f"n_regimes={n_regimes} but the scaler was fitted with "
+                         f"{scaler.kmeans.n_clusters} regimes")
     return scaler.transform(df), scaler

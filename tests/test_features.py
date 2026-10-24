@@ -35,9 +35,18 @@ def train():
 
 
 def test_output_has_every_documented_column(train):
+    """feature_groups lists exactly the columns make_features adds, plus the raw inputs."""
     out, _ = make_features(train, SENSORS, WINDOWS)
-    for columns in feature_groups(SENSORS, WINDOWS).values():
-        assert set(columns) <= set(out.columns)
+    groups = feature_groups(SENSORS, WINDOWS)
+    assert set(groups.pop("raw")) <= set(train.columns)
+    added = [c for c in out.columns if c not in train.columns]
+    assert sorted(added) == sorted(c for columns in groups.values() for c in columns)
+
+
+def test_existing_feature_columns_rejected(train):
+    out, scaler = make_features(train, SENSORS, WINDOWS)
+    with pytest.raises(ValueError, match="already has feature columns"):
+        make_features(out, SENSORS, WINDOWS, scaler=scaler)
 
 
 def test_rows_and_index_preserved(train):
@@ -101,13 +110,22 @@ def test_scaler_fit_on_train_is_reused_on_validation(train):
     val = _engines([7, 8], seed=1)
     _, scaler = make_features(train, SENSORS, WINDOWS)
     before = scaler.regime_mean.copy()
+    std_before = scaler.regime_std.copy()
+    centres_before = scaler.kmeans.cluster_centers_.copy()
+    coef_before = scaler.health_model.coef_.copy()
+    intercept_before = scaler.health_model.intercept_
     out, returned = make_features(val, SENSORS, WINDOWS, scaler=scaler)
     assert returned is scaler
     pd.testing.assert_frame_equal(scaler.regime_mean, before)
+    pd.testing.assert_frame_equal(scaler.regime_std, std_before)
+    np.testing.assert_array_equal(scaler.kmeans.cluster_centers_, centres_before)
+    np.testing.assert_array_equal(scaler.health_model.coef_, coef_before)
+    assert scaler.health_model.intercept_ == intercept_before
     expected = (val["s_3"] - before.loc[0, "s_3"]) / scaler.regime_std.loc[0, "s_3"]
     np.testing.assert_allclose(out["s_3_norm"], expected)
     _, refit = make_features(val, SENSORS, WINDOWS)
     assert not np.allclose(refit.regime_mean.to_numpy(), before.to_numpy())
+    assert not np.allclose(refit.health_model.coef_, coef_before)
 
 
 def test_health_index_is_bounded_and_falls_with_wear(train):
@@ -134,6 +152,14 @@ def test_constant_sensor_is_not_amplified(train):
     df = train.assign(s_16=0.03 + np.tile([0.0, 1e-17], len(train))[:len(train)])
     out, _ = make_features(df, [*SENSORS, "s_16"], WINDOWS)
     assert out["s_16_norm"].abs().max() < 1e-8
+
+
+def test_mismatched_n_regimes_rejected(train):
+    _, scaler = make_features(train, SENSORS, WINDOWS, n_regimes=2)
+    with pytest.raises(ValueError, match="n_regimes"):
+        make_features(train, SENSORS, WINDOWS, scaler=scaler, n_regimes=1)
+    out, _ = make_features(train, SENSORS, WINDOWS, scaler=scaler)
+    assert out.regime.nunique() <= 2
 
 
 def test_mismatched_sensors_rejected(train):
