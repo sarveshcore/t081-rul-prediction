@@ -6,7 +6,9 @@
 Each FD001 row is one cycle of one engine: the cycle number, three
 operating settings and 21 sensor readings. A single reading is noisy and
 says little about how far an engine has degraded, so we add features that
-summarise each sensor's recent history. All features are computed by
+summarise each sensor's recent history. We use the 14 informative sensors
+selected by the exploratory analysis, which drops the six constant sensors
+and the near binary s\_6. All features are computed by
 \texttt{make\_features} in \texttt{src/rul/features.py}, which returns one
 row per input row with the original index. Every window is computed within
 a single engine (grouped by \texttt{unit} and ordered by cycle), so no
@@ -31,9 +33,9 @@ z_{t,j} = \frac{x_{t,j} - \mu_{r(t),j}}{\sigma_{r(t),j}},
 where $r(t)$ is the regime nearest to the row's settings. FD001 runs in one
 regime ($K = 1$), so this is an ordinary z-score; with $K = 6$ the same code
 removes the regime offsets of FD002 and FD004, leaving variation due to
-wear. Sensors that are constant in FD001 (s\_1, s\_5, s\_10, s\_16, s\_18,
-s\_19) have $\sigma = 0$ up to floating point noise; they are only centred,
-so their features are zero rather than amplified noise.
+wear. If a sensor that is constant in a regime is passed in (such as
+s\_1 or s\_16 in FD001), its $\sigma$ is 0 up to floating point noise; it is
+only centred, so its features are zero rather than amplified noise.
 
 The cluster centres and $(\mu, \sigma)$ are estimated on training engines
 only and stored in a scaler object that is reused, unchanged, on
@@ -127,10 +129,10 @@ engines (mean over folds, RUL capped at 125).}
 \hline
 Features & $n$ & RMSE & MAE & Late RMSE \\
 \hline
-Cycle and raw sensors      &  22 & 16.81 & 11.53 & 15.56 \\
-+ rolling mean and std     & 148 & 16.35 & 11.02 & 13.87 \\
-+ rolling slope            & 211 & 14.78 & 10.02 & 11.35 \\
-+ health index             & 212 & 14.72 &  9.94 & 11.22 \\
+Cycle and raw sensors      &  15 & 16.81 & 11.53 & 15.54 \\
++ rolling mean and std     &  99 & 16.36 & 11.04 & 13.86 \\
++ rolling slope            & 141 & 14.78 & 10.04 & 11.37 \\
++ health index             & 142 & 14.74 &  9.97 & 11.24 \\
 \hline
 \end{tabular}
 \end{table}
