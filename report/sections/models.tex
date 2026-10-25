@@ -113,7 +113,9 @@ on statistics fitted to training data; they are rebuilt in every fold from
 that fold's training engines and then applied to its validation engines.
 Each model is tuned separately on each feature set, and the configuration
 with the lowest mean validation RMSE is selected. Elastic Net is cheap, so
-its full grid is searched; for Random Forest and XGBoost a fixed number of
+its full grid is searched, solved by coordinate descent on a precomputed
+Gram matrix with up to 100,000 iterations so that every configuration
+converges; for Random Forest and XGBoost a fixed number of
 configurations is drawn at random from the grid with seed 42.
 Table~\ref{tab:search-space} lists the search spaces and the selected
 values. The test set is not used.
@@ -123,15 +125,15 @@ values. The test set is not used.
 \caption{Search spaces. Selected values are in parentheses, given as
 raw / engineered where the two feature sets differ. Random Forest and
 XGBoost sample 6 and 8 configurations from their grids; Elastic Net
-searches all 12.}
+searches all 20.}
 \label{tab:search-space}
 \footnotesize
 \begin{tabular}{llp{2.9cm}}
 \hline
 Model & Hyperparameter & Values (selected) \\
 \hline
-Elastic Net & \texttt{alpha} & 0.1, 0.3, 1.0 (0.1) \\
-            & \texttt{l1\_ratio} & 0.2, 0.5, 0.8, 1.0 (1.0) \\
+Elastic Net & \texttt{alpha} & 0.001, 0.01, 0.1, 0.3, 1.0 (0.1 / 0.001) \\
+            & \texttt{l1\_ratio} & 0.2, 0.5, 0.8, 1.0 (1.0 / 0.8) \\
 \hline
 Random      & \texttt{n\_estimators} & 100, 200 (200 / 100) \\
 Forest      & \texttt{max\_depth} & 8, 12, none (12 / none) \\
@@ -185,7 +187,7 @@ Elastic Net       & raw        & capped   & $20.12 \pm 1.54$ & $16.37 \pm 1.29$ 
 Random Forest     & raw        & capped   & $16.43 \pm 0.77$ & $11.47 \pm 0.71$ & 15.40 & 18.29 \\
 XGBoost           & raw        & capped   & $16.42 \pm 0.87$ & $11.38 \pm 0.70$ & 15.23 & 18.28 \\
 Linear regression & engineered & capped   & $17.07 \pm 0.78$ & $13.72 \pm 0.63$ & 16.89 & 17.65 \\
-Elastic Net       & engineered & capped   & $17.75 \pm 1.06$ & $14.33 \pm 0.85$ & 17.63 & 18.15 \\
+Elastic Net       & engineered & capped   & $17.06 \pm 0.80$ & $13.72 \pm 0.64$ & 16.86 & 17.63 \\
 Random Forest     & engineered & capped   & $14.42 \pm 0.48$ & $9.87 \pm 0.56$  & 10.98 & 15.76 \\
 XGBoost           & engineered & capped   & $\mathbf{13.99} \pm 0.46$ & $\mathbf{9.81} \pm 0.42$ & \textbf{9.88} & \textbf{15.09} \\
 \hline
@@ -209,18 +211,20 @@ clearer advantage is on late-life cycles (9.88 against 10.98).
 
 All tuned models beat the mean baseline. Against the linear regression
 baseline on raw features, both tree ensembles are better on both feature
-sets and Elastic Net is better on engineered features (17.75 against
-20.12). On raw features Elastic Net and linear regression are tied:
-Elastic Net's RMSE is 0.0006 lower and its MAE 0.0015 higher, far inside
-the fold standard deviation. With 15 features and over 16,000 training
-rows per fold, the linear model is limited by bias rather than variance,
-so the penalty has almost nothing to remove, and at small $\alpha$ Elastic
-Net reduces to least squares. On engineered features, Elastic Net is less
-accurate than unregularised linear regression on the same features (17.75
-against 17.07). The selected penalty is pure L1, which makes the model
-sparse by setting some coefficients exactly to zero, but it does not
-improve predictive accuracy here; Elastic Net's gain over the raw baseline
-comes from the engineered features, not from regularisation.
+sets and Elastic Net is better on engineered features (17.06 against
+20.12). On each feature set, Elastic Net ties with unregularised linear
+regression on the same inputs: on raw features its RMSE is 0.0006 lower
+and its MAE 0.0015 higher, and on engineered features its RMSE is 0.003
+lower and its MAE 0.0003 higher, all far inside the fold standard
+deviations. With at most 142 features and over 16,000 training rows per
+fold, the linear model is limited by bias rather than variance, so the
+penalty has almost nothing to remove. On engineered features the error
+rises steadily with $\alpha$ (17.75 at $\alpha = 0.1$ and 19.39 at
+$\alpha = 1$, both pure L1), and the search selects the smallest value in
+the grid, $\alpha = 0.001$; smaller values only bring Elastic Net closer
+to least squares, whose score is the linear regression row. The penalty
+does not improve predictive accuracy here; Elastic Net's gain over the
+raw baseline comes from the engineered features, not from regularisation.
 
 \subsection{Effect of the RUL cap}
 Capping assumes that degradation is not visible early in life, so a model

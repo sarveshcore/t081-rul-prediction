@@ -29,14 +29,15 @@
   "models": {
     "elastic_net/engineered": {
       "params": {
-        "alpha": 0.1,
-        "l1_ratio": 1.0,
-        "max_iter": 10000
+        "alpha": 0.001,
+        "l1_ratio": 0.8,
+        "max_iter": 100000,
+        "precompute": true
       },
-      "rmse_mean": 17.746,
-      "rmse_std": 1.061,
-      "mae_mean": 14.326,
-      "mae_std": 0.848
+      "rmse_mean": 17.063,
+      "rmse_std": 0.796,
+      "mae_mean": 13.719,
+      "mae_std": 0.639
     },
     "random_forest/engineered": {
       "params": {
@@ -68,7 +69,8 @@
       "params": {
         "alpha": 0.1,
         "l1_ratio": 1.0,
-        "max_iter": 10000
+        "max_iter": 100000,
+        "precompute": true
       },
       "rmse_mean": 20.119,
       "rmse_std": 1.542,

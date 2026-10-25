@@ -28,7 +28,7 @@ are rebuilt inside every fold from that fold's training engines only.
 |---|---|---|
 | Mean baseline | 41.67 | – |
 | Linear regression | 20.12 | 17.07 |
-| Elastic Net | 20.12 | 17.75 |
+| Elastic Net | 20.12 | 17.06 |
 | Random Forest | 16.43 | 14.42 |
 | **XGBoost** | 16.42 | **13.99** |
 
@@ -68,13 +68,16 @@ Minimise squared error + α·ρ·|β|₁ + α·(1−ρ)/2·|β|₂².
   feature units. So a `StandardScaler` comes first, in one `Pipeline`, and
   is fitted on each fold's training engines only.
 
-Our result: the best setting was α = 0.1, ρ = 1.0 (pure L1) on both
-feature sets. On engineered features, in each fold the L1 penalty set
-roughly a quarter of the 142 coefficients (30 to 43) exactly to zero. But
-plain linear regression on the same engineered features scores 17.07
-against Elastic Net's 17.75. So the penalty buys sparsity (a simpler
-model), not accuracy. The improvement over raw features comes from the
-features, not the penalty.
+Our result: on engineered features the best setting was the weakest
+penalty in the grid, α = 0.001 (ρ = 0.8), with RMSE 17.06, a tie with
+plain linear regression on the same features (17.07). The error rises
+steadily as α grows: 17.75 at α = 0.1 and 19.39 at α = 1 (pure L1). On
+raw features α = 0.1, ρ = 1 ties with linear regression too. So the
+penalty does not buy accuracy here. A stronger penalty buys sparsity (at
+α = 0.1 the L1 penalty zeroes 38 of 142 coefficients) but costs accuracy.
+The improvement over raw features comes from the features, not the
+penalty. The grid stops at α = 0.001 because smaller α only moves Elastic
+Net closer to least squares, which we already score.
 
 ### Bagging vs boosting
 | | Bagging (Random Forest) | Boosting (XGBoost) |
@@ -100,8 +103,11 @@ derivative of the loss to pick splits.
 Selected values in brackets as raw / engineered.
 
 **Elastic Net**
-- `alpha` {0.1, 0.3, 1.0} [0.1]: penalty strength.
-- `l1_ratio` {0.2, 0.5, 0.8, 1.0} [1.0]: share of L1 in the penalty.
+- `alpha` {0.001, 0.01, 0.1, 0.3, 1.0} [0.1 / 0.001]: penalty strength.
+- `l1_ratio` {0.2, 0.5, 0.8, 1.0} [1.0 / 0.8]: share of L1 in the penalty.
+- Fitted with up to 100,000 coordinate descent iterations on a
+  precomputed Gram matrix (XᵀX, 142 × 142), so even the weakest penalty
+  converges; with 10,000 iterations α ≤ 0.01 did not.
 
 **Random Forest**
 - `n_estimators` {100, 200} [200 / 100]: number of trees. More trees lower
@@ -173,15 +179,17 @@ They are tied: RMSE 0.0006 lower, MAE 0.0015 higher, while folds vary by
 about 1.5. A penalty lowers variance, but with 15 features and 16,000+ rows
 per fold linear regression has almost no variance to remove. Its problem
 is bias (it is linear in 15 raw inputs), and a penalty cannot fix bias. At
-small α Elastic Net becomes linear regression. Even on the 142 engineered
-features the penalty does not help accuracy: plain linear regression gets
-17.07, Elastic Net 17.75. What helps is the features (20.12 → 17.07).
+small α Elastic Net becomes linear regression. On the 142 engineered
+features it is the same story: the search picks the weakest penalty and
+ties linear regression (17.06 vs 17.07). What helps is the features
+(20.12 → 17.07).
 
 **3. Why combine L1 and L2 instead of just Lasso?**
 Lasso picks one feature from a group of correlated features almost at
 random, and the pick changes with the data. L2 spreads weight and keeps
 the fit stable. Elastic Net lets the data choose the mix; here the search
-picked pure L1 (ρ = 1), which is still part of the Elastic Net family.
+picked ρ = 1 (pure L1) on raw features and ρ = 0.8 on engineered features,
+though with α so small the mix hardly matters.
 
 **4. Why scale features for Elastic Net but not for the trees?**
 The penalty adds up coefficient sizes, and a coefficient's size depends on
@@ -191,7 +199,7 @@ threshold, so trees don't care.
 
 **5. Why random search for RF and XGBoost but a full grid for Elastic
 Net?**
-Elastic Net is fast, so all 12 combinations are cheap. RF and XGBoost
+Elastic Net is fast, so all 20 combinations are cheap. RF and XGBoost
 grids have 54 and 216 combinations, and a full search with 5 folds on
 both feature sets would take hours. A random sample of 6 and 8 covers the
 range of every hyperparameter at a fraction of the cost. Usually only a
@@ -201,10 +209,10 @@ values of each than a grid of the same size.
 **6. How do you know you didn't overfit the hyperparameters to the
 validation folds?**
 I can't fully. The same folds pick the best configuration and report its
-score, so that score is a bit optimistic: out of 26 tries, the winner is
+score, so that score is a bit optimistic: out of 34 tries, the winner is
 partly the one that got lucky on these folds. This is selection bias, and
 it is separate from leakage. Grouping by engine stops leakage between
-engines; a small search (26 configurations per feature set) and averaging
+engines; a small search (34 configurations per feature set) and averaging
 over 5 folds keep the optimism small, but neither removes it. Nested cross
 validation would (an inner loop to tune, an outer loop to score). We rely
 instead on the test set: #6 scores it once with the frozen parameters from
