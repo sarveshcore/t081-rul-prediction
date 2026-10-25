@@ -1,5 +1,5 @@
 % ABOUTME: Models and tuning section of the IEEE report (issue #5).
-% ABOUTME: Elastic Net, Random Forest and XGBoost theory, tuning setup, CV results and the RUL cap.
+% ABOUTME: Model theory, tuning, CV results, the RUL cap and what the models rely on.
 \section{Models and Tuning}
 \label{sec:models}
 
@@ -251,3 +251,104 @@ Table~\ref{tab:search-space}. The selected configuration of every model on
 both feature sets is saved in \texttt{results/best\_params.json}, together
 with the sensor list and window lengths needed to rebuild the features, so
 test evaluation uses exactly the configurations chosen here.
+
+\subsection{Explainability}
+\label{sec:explain}
+We examine what each selected model relies on, using training engines
+only (\texttt{notebooks/05\_explain.ipynb}). The 142 engineered columns
+are strongly correlated, since each sensor contributes its raw reading and
+a rolling mean, standard deviation and slope over three windows. All
+results are therefore also summed into 16 groups: one per sensor, plus
+\texttt{cycle} and \texttt{health\_index}.
+
+\emph{Impurity importance} is the training loss reduction from the splits
+that use a feature: the mean decrease in squared error for Random Forest
+and \texttt{total\_gain} for XGBoost (XGBoost's default \texttt{gain} is an
+average per split and cannot be summed over a group). \emph{Permutation
+importance}~\cite{breiman2001rf} is the rise in RMSE when a feature's
+values are shuffled across rows. We compute it on held-out engines: in
+each of the five engine folds the model is refitted on the training
+engines and shuffled on the validation engines, five times per fold. All
+columns of a group are shuffled with the same row order. Shuffling one
+column at a time would understate a sensor whose information is
+duplicated in its other columns, because the model can recover it from
+the unshuffled copies.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{../figures/explain_importance.png}
+  \caption{Importance of each sensor group as a share of the total:
+  impurity importance on training rows and grouped permutation importance
+  on held-out engines (mean and fold standard deviation over five
+  engine folds).}
+  \label{fig:explain-importance}
+\end{figure*}
+
+Both tree ensembles depend most on the health index
+(Fig.~\ref{fig:explain-importance}). Shuffling it on held-out engines
+raises RMSE by 10.96 cycles for XGBoost and 7.36 for Random Forest, and
+shuffling \texttt{cycle} by 4.84 and 5.22; no other group adds more than
+1.62. Below these, the two measures disagree. \texttt{s\_4} receives 26\%
+of Random Forest's impurity reduction but costs only 1.62 cycles when
+shuffled, because its information is also carried by \texttt{s\_11}, the
+other degrading sensors and the health index. Impurity importance credits
+whichever correlated feature a split happened to use, while permutation
+importance measures what the model loses when that information is gone.
+\texttt{cycle} shows the reverse: 8 to 10\% of impurity reduction but 20
+to 26\% of permutation importance, since no other input carries the
+engine's age. Impurity importance also describes the training rows,
+including splits that fit noise, while held-out permutation importance
+measures dependence on unseen engines.
+
+A SHAP value~\cite{lundberg2017shap} is the contribution of one feature to
+one prediction relative to the model's average prediction. For each row
+the contributions add up exactly: the base value (the mean prediction)
+plus the row's SHAP values equals the prediction. Each value is the
+feature's Shapley value, its average marginal effect over all orders in
+which features can be added. \texttt{shap.TreeExplainer} computes these
+exactly for tree ensembles~\cite{lundberg2020tree}. We explain the
+XGBoost model fitted on all training engines on 2,000 seeded training
+rows; the largest additivity gap is $1.4 \times 10^{-4}$ cycles, around
+a base value of 86.83 (Fig.~\ref{fig:explain-shap}). A low health index
+lowers the prediction by up to 40 cycles, and late cycles lower it. The sensor effects are smaller
+and follow the degradation trends: high recent means and positive slopes
+of \texttt{s\_2}, \texttt{s\_4}, \texttt{s\_11} and \texttt{s\_15} lower
+the predicted RUL, and negative slopes of \texttt{s\_7} and \texttt{s\_12}
+lower it. Every slope among the top 20 columns uses the 20-cycle window.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{../figures/explain_shap_summary.png}
+  \caption{SHAP values of the selected XGBoost model on 2,000 training
+  rows, for the 20 columns with the largest mean absolute SHAP value.
+  Colour is the feature's value.}
+  \label{fig:explain-shap}
+\end{figure}
+
+Elastic Net standardises its inputs, so its coefficients are comparable in
+size. At the selected penalty ($\alpha = 0.001$) no coefficient is zero,
+and the largest after the health index are rolling means of one sensor
+over two windows with opposite signs (\texttt{s\_11\_mean\_20} $+22.5$,
+\texttt{s\_11\_mean\_10} $-20.1$). Together they act as a trend estimate,
+and neither sign means anything alone. Strengthening a pure L1 penalty
+zeroes 38 coefficients at $\alpha = 0.1$ and 116 at $\alpha = 1$. The
+single-cycle sensor readings are dropped first, as noisier copies of
+their 5-cycle means, but every sensor keeps at least one column even at
+$\alpha = 1$. With correlated inputs L1 keeps one column of a correlated
+set somewhat arbitrarily, so a zero means ``redundant given the others'',
+not ``unrelated to RUL''. These sparser models are also less accurate
+(17.75 and 19.39 against 17.06).
+
+The models do rely on the sensors the exploratory analysis found
+degrading, but mostly through the health index, a linear combination of
+all 14 sensors whose largest weights are on \texttt{s\_11}, \texttt{s\_9},
+\texttt{s\_12}, \texttt{s\_4} and \texttt{s\_7}. Among individual sensors,
+\texttt{s\_4}, \texttt{s\_15} and \texttt{s\_2}, three of the four that
+rise towards failure, lead XGBoost's SHAP ranking. \texttt{s\_7} and
+\texttt{s\_12} correlate strongly with RUL but rank low, since their
+information is largely duplicated by \texttt{s\_4}, \texttt{s\_11} and the
+health index. Reliance on \texttt{cycle}, second under SHAP and permutation
+importance, means the models partly predict from age. This works on
+FD001, where every engine starts in normal condition and training
+lifetimes span 128 to 362 cycles, but it would transfer less well to
+fleets with different lifetimes.

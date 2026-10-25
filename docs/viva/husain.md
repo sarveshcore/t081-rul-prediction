@@ -1,9 +1,11 @@
 # Viva notes: Husain
 
-My part: training and tuning the models. Code: `src/rul/models.py`,
-`notebooks/03_models.ipynb`. Results: `results/models_cv.csv`,
-`results/models_search.csv`, `results/best_params.json`. Report:
-`report/sections/models.tex`.
+My part: training and tuning the models, then explaining what they rely
+on. Code: `src/rul/models.py`, `src/rul/explain.py`,
+`notebooks/03_models.ipynb`, `notebooks/05_explain.ipynb`. Results:
+`results/models_cv.csv`, `results/models_search.csv`,
+`results/best_params.json`, `results/explain_*.csv`, figures
+`figures/explain_*.png`. Report: `report/sections/models.tex`.
 
 ## My part in plain words
 
@@ -180,8 +182,8 @@ about 1.5. A penalty lowers variance, but with 15 features and 16,000+ rows
 per fold linear regression has almost no variance to remove. Its problem
 is bias (it is linear in 15 raw inputs), and a penalty cannot fix bias. At
 small α Elastic Net becomes linear regression. On the 142 engineered
-features it is the same story: the search picks the weakest penalty and
-ties linear regression (17.06 vs 17.07). What helps is the features
+features the search also picks the weakest penalty and ties linear
+regression (17.06 vs 17.07). What helps is the features
 (20.12 → 17.07).
 
 **3. Why combine L1 and L2 instead of just Lasso?**
@@ -245,6 +247,109 @@ variance. Random Forest: keeps the low bias, cuts variance by averaging
 decorrelated trees. XGBoost: starts with high-bias shallow trees and cuts
 bias with each round; variance is controlled by the learning rate, depth,
 `reg_lambda` and subsampling.
+
+## Explainability: what the models rely on
+
+### Sensor groups
+The 142 columns are 10 per sensor (raw, mean/std/slope × 3 windows) plus
+`cycle` and `health_index`. They are very correlated, so I also sum every
+result into 16 groups: one per sensor, plus `cycle` and `health_index`.
+`sensor_group` in `src/rul/explain.py` maps `s_2_mean_5` → `s_2`.
+
+### Impurity importance
+How much the training loss went down at splits on that feature, added up.
+Random Forest: `feature_importances_` (mean decrease in squared error).
+XGBoost: `total_gain`. I don't use the default `gain` because it is the
+*average* gain per split: a feature used once with a big gain looks
+important, and averages can't be summed over a group.
+
+Problems: it is measured on training rows (so splits that fit noise count),
+and with correlated features the credit goes to whichever one the tree
+happened to split on.
+
+### Permutation importance
+Shuffle a feature's values across rows and see how much RMSE goes up. The
+link between that feature and the target is broken, everything else stays.
+I do it on held-out engines: in each of the 5 folds, fit on the training
+engines, shuffle on the validation engines, 5 shuffles, average.
+
+**Grouped:** I shuffle all 10 columns of one sensor together with the same
+row order. If I shuffled only `s_4_mean_10`, the model could still read
+`s_4_mean_5`, so `s_4` would look unimportant.
+
+### Why they disagree (the viva question)
+| | Impurity | Permutation |
+|---|---|---|
+| Data | training rows | held-out engines |
+| Measures | how the trees were built | how much accuracy depends on it |
+| Correlated features | credit goes to whichever got the split | only what the others can't replace counts |
+
+Our example: `s_4` gets 26% of Random Forest's impurity importance but
+shuffling it costs only 1.62 cycles, because `s_11`, other degrading
+sensors and the health index carry the same information. `cycle` is the
+opposite: 8% impurity but 26% of permutation importance, because nothing
+else tells the model the engine's age.
+
+### SHAP (the other viva question)
+A SHAP value is how much one feature pushed one prediction away from the
+average prediction. For every row:
+
+prediction = base value + sum of that row's SHAP values
+
+The base value is the mean prediction (86.83 cycles here). Each SHAP value
+is the feature's Shapley value from game theory: its average marginal
+effect over every order in which the features could be added. Features are
+the "players", the prediction is the "payout", and the payout is shared
+fairly. `shap.TreeExplainer` computes them exactly for trees, fast. I
+checked the sum: base + SHAP is at most 0.00014 cycles off the prediction.
+
+Reading the beeswarm (`figures/explain_shap_summary.png`): one dot per row,
+x = SHAP value, colour = feature value. Health index low (blue) → up to
+−40 cycles. Late cycles → lower prediction. High `s_4`, `s_2`, `s_11`,
+`s_15` means and rising slopes → lower RUL (they rise towards failure).
+Falling `s_7`, `s_12` slopes → lower RUL.
+
+Group SHAP: SHAP values add, so a sensor's SHAP for one row is the sum over
+its 10 columns. Mean |group SHAP|: health index 15.3, `cycle` 6.8, `s_4`
+3.4, `s_15` 2.9, `s_2` 2.8.
+
+### Elastic Net zeros
+At the selected α = 0.001 none of the 142 coefficients is zero. The biggest
+ones come in opposite-sign pairs (`s_11_mean_20` +22.5, `s_11_mean_10`
+−20.1): together they are a trend (long average minus short average), so
+one sign alone means nothing. With pure L1, α = 0.1 zeroes 38 and α = 1
+zeroes 116. The raw single-cycle readings go first (each is a noisy copy of
+its 5-cycle mean), but every sensor keeps at least one column. A zero means
+"redundant given the others", not "useless", because L1 picks one of a
+correlated group somewhat arbitrarily. The sparser models are worse (17.75,
+19.39 vs 17.06).
+
+### Does it match the EDA?
+Yes, mostly through the health index (a linear mix of all 14 sensors,
+biggest weights on `s_11`, `s_9`, `s_12`, `s_4`, `s_7`). Health index +
+`cycle` = 45% of SHAP and 62 to 65% of permutation importance. Of the
+single sensors, `s_4`, `s_15`, `s_2` lead SHAP: three of the four the EDA
+saw rising. `s_7` and `s_12` correlate strongly (0.73, 0.75) but rank low,
+because `s_4`, `s_11` and the health index already carry their signal.
+`s_9` and `s_14` had the weakest EDA correlation but rank mid-table: their
+trend goes the "wrong" way in 29% and 40% of engines, which weakens the
+pooled correlation, yet shuffling `s_9` still costs 1.0 to 1.4 cycles.
+
+`cycle` mattering means the model partly predicts from age. Fine on FD001
+(every engine starts healthy, lifetimes 128 to 362), risky on a fleet with
+very different lifetimes.
+
+### Likely questions
+**Why permute on held-out engines, not training rows?** On training rows,
+a model that memorised noise in a feature would look like it depends on it.
+On unseen engines only real dependence costs accuracy.
+
+**Why not just use XGBoost's built-in importance?** It is impurity-style,
+on training data, and its default (`gain`) is an average per split. I use
+it, but next to permutation (held-out) and SHAP (per prediction).
+
+**Is SHAP causal?** No. It explains the model, not the engine. A big SHAP
+value for `cycle` means the model uses age, not that age causes failure.
 
 ## Things I must check before the viva
 - The test results from #6 (`results/test_metrics.csv`), and whether
