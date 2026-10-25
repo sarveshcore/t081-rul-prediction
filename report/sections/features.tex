@@ -116,9 +116,9 @@ feature, a 20 cycle rolling mean, reaches $|r| = 0.80$ in sample.
 Table~\ref{tab:feature-ablation} adds the feature families one at a time
 to a Random Forest, scored with five fold cross validation grouped by
 engine on every validation cycle. The forest uses default hyperparameters
-(seed 42) as a stand-in until the tuned forest of the model section
-is available; the table will be rerun with that model so the two sections
-agree.
+(seed 42), so the comparison reflects the features rather than tuning. The
+tuned forest of Section~\ref{sec:models} reaches an RMSE of 14.42 on the
+full engineered set (Table~\ref{tab:cv-results}).
 
 \begin{table}[t]
 \centering

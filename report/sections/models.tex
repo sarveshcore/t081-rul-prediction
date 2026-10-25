@@ -1,0 +1,249 @@
+% ABOUTME: Models and tuning section of the IEEE report (issue #5).
+% ABOUTME: Elastic Net, Random Forest and XGBoost theory, tuning setup, CV results and the RUL cap.
+\section{Models and Tuning}
+\label{sec:models}
+
+Each training row is one cycle of one engine, and the task is to regress
+its RUL, capped at 125 cycles. We compare two naive baselines with three
+models of increasing flexibility: Elastic Net, a regularised linear model;
+Random Forest, an average of deep trees; and XGBoost, a sum of shallow
+boosted trees. Each model is trained on two feature sets: the raw set
+(cycle number and the 14 informative sensors, 15 features) and the
+engineered set of Section~\ref{sec:features} (142 features). All models are
+built by \texttt{build\_model} in \texttt{src/rul/models.py}. Random
+Forest and XGBoost are seeded with 42; Elastic Net has no random component,
+since its coordinate descent updates the coefficients in a fixed cyclic
+order.
+
+\subsection{Baselines}
+The mean predictor returns the mean training RUL for every row; it ignores
+the sensors and sets the error that any useful model must improve on.
+Ordinary least squares on the raw features is the simplest model that uses
+the sensors. Every tuned model is expected to beat both. Linear regression
+is also fitted on the engineered features, as an unregularised reference
+for Elastic Net on the same inputs.
+
+\subsection{Elastic Net}
+Elastic Net~\cite{zou2005elasticnet} is linear regression with a penalty
+that mixes the L1 and L2 norms of the coefficients. In the parametrisation
+used by scikit-learn, with $n$ rows, features $\mathbf{x}_i$ and targets
+$y_i$, it solves
+\begin{equation}
+\begin{aligned}
+\min_{\beta_0, \boldsymbol\beta}\ &
+\frac{1}{2n}\sum_{i=1}^{n}\bigl(y_i - \beta_0 - \boldsymbol\beta^\top
+\mathbf{x}_i\bigr)^2 \\
+& + \alpha\rho\,\lVert\boldsymbol\beta\rVert_1
++ \frac{\alpha(1-\rho)}{2}\,\lVert\boldsymbol\beta\rVert_2^2 ,
+\end{aligned}
+\end{equation}
+where $\alpha \ge 0$ sets the overall strength of the penalty and
+$\rho \in [0, 1]$ (\texttt{l1\_ratio}) its L1 share. The L1 term can set
+coefficients exactly to zero, so it selects features. On its own (the
+Lasso, $\rho = 1$) it tends to keep one feature from a group of correlated
+features and drop the others more or less arbitrarily, and the choice can
+change between samples. The L2 term shrinks coefficients smoothly towards
+zero, spreads weight across correlated features and makes the solution
+stable. Mixing the two gives sparse models that remain stable when
+features are strongly correlated, as the rolling statistics of one sensor
+over three windows are.
+
+The penalty depends on the scale of each coefficient, so features are
+standardised first. The scaler and the regression form one scikit-learn
+\texttt{Pipeline}, so in cross validation the scaler is fitted on each
+fold's training engines only. Elastic Net is linear in its inputs, so it
+has high bias and low variance. On raw sensors it cannot follow the
+flat-then-accelerating shape of degradation; it can represent nonlinear
+behaviour only through features that already encode it, such as rolling
+slopes and the health index. The penalty lowers variance further at the
+cost of more bias.
+
+\subsection{Random Forest}
+A regression tree splits the feature space into boxes and predicts the mean
+target in each box. A deep tree has low bias but high variance: a small
+change in the training data can change its splits completely. Random
+Forest~\cite{breiman2001rf} trains $B$ trees, each on a bootstrap sample of
+the rows (bagging), considers only a random subset of the features at each
+split, and averages the predictions. If each tree has variance $\sigma^2$
+and two trees have correlation $\rho$, the variance of the average is
+\begin{equation}
+\rho\,\sigma^2 + \frac{1-\rho}{B}\,\sigma^2 .
+\end{equation}
+Adding trees removes the second term, and sampling features at each split
+lowers $\rho$, so the forest keeps the low bias of deep trees while
+reducing their variance. Trees are trained independently, and as trees
+are added the forest's generalisation error converges~\cite{breiman2001rf}:
+adding trees does not increase overfitting; the error levels off, so more
+trees only cost time.
+
+\subsection{Gradient boosting and XGBoost}
+Boosting builds an additive model one tree at a time, each tree correcting
+the errors of the trees before it~\cite{friedman2001gbm}:
+\begin{equation}
+F_m(\mathbf{x}) = F_{m-1}(\mathbf{x}) + \eta\, f_m(\mathbf{x}),
+\end{equation}
+where $f_m$ is a shallow tree fitted to the negative gradient of the loss
+at $F_{m-1}$ and $\eta$ is the learning rate. For squared error the
+negative gradient is the residual $y_i - F_{m-1}(\mathbf{x}_i)$, so each
+tree is fitted to what the current model still gets wrong. Where bagging
+averages independent low-bias trees to cut variance, boosting adds
+dependent high-bias trees to cut bias. Each added tree fits the training
+data more closely, so the number of rounds, the learning rate and the tree
+depth must be limited to control variance.
+
+XGBoost~\cite{chen2016xgboost} adds regularisation to the boosting
+objective. Tree $m$ minimises
+\begin{equation}
+\sum_{i=1}^{n} \ell\bigl(y_i, F_{m-1}(\mathbf{x}_i) + f_m(\mathbf{x}_i)\bigr)
++ \gamma T + \frac{\lambda}{2}\lVert\mathbf{w}\rVert_2^2 ,
+\end{equation}
+where $T$ is the number of leaves and $\mathbf{w}$ the leaf values. The
+$\gamma$ term charges for each extra leaf, and the $\lambda$ term
+(\texttt{reg\_lambda}) shrinks leaf values, so a leaf supported by few rows
+moves the prediction less. XGBoost uses a second order Taylor expansion of
+the loss to choose splits and leaf values, and can also subsample rows
+(\texttt{subsample}) and features (\texttt{colsample\_bytree}) for each
+tree, which adds bagging-like randomness.
+
+\subsection{Tuning setup}
+All tuning uses the five engine-grouped folds of
+Section~\ref{sec:evaluation}, so every engine is validated exactly once and
+no engine appears on both sides of a split. The engineered features depend
+on statistics fitted to training data; they are rebuilt in every fold from
+that fold's training engines and then applied to its validation engines.
+Each model is tuned separately on each feature set, and the configuration
+with the lowest mean validation RMSE is selected. Elastic Net is cheap, so
+its full grid is searched; for Random Forest and XGBoost a fixed number of
+configurations is drawn at random from the grid with seed 42.
+Table~\ref{tab:search-space} lists the search spaces and the selected
+values. The test set is not used.
+
+\begin{table}[t]
+\centering
+\caption{Search spaces. Selected values are in parentheses, given as
+raw / engineered where the two feature sets differ. Random Forest and
+XGBoost sample 6 and 8 configurations from their grids; Elastic Net
+searches all 12.}
+\label{tab:search-space}
+\footnotesize
+\begin{tabular}{llp{2.9cm}}
+\hline
+Model & Hyperparameter & Values (selected) \\
+\hline
+Elastic Net & \texttt{alpha} & 0.1, 0.3, 1.0 (0.1) \\
+            & \texttt{l1\_ratio} & 0.2, 0.5, 0.8, 1.0 (1.0) \\
+\hline
+Random      & \texttt{n\_estimators} & 100, 200 (200 / 100) \\
+Forest      & \texttt{max\_depth} & 8, 12, none (12 / none) \\
+            & \texttt{min\_samples\_leaf} & 1, 5, 10 (1 / 5) \\
+            & \texttt{max\_features} & 0.3, 0.5, 1.0 (0.3 / 0.5) \\
+\hline
+XGBoost     & \texttt{n\_estimators} & 200, 400 (400) \\
+            & \texttt{learning\_rate} & 0.03, 0.05, 0.1 (0.03 / 0.05) \\
+            & \texttt{max\_depth} & 3, 4, 6 (4) \\
+            & \texttt{subsample} & 0.8, 1.0 (1.0) \\
+            & \texttt{colsample\_bytree} & 0.5, 0.8, 1.0 (0.5 / 0.8) \\
+            & \texttt{reg\_lambda} & 1, 5 (5) \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Cross validation results}
+Table~\ref{tab:cv-results} reports each selected configuration. RMSE and
+MAE are the mean and standard deviation over the five folds, computed on
+every held-out cycle against the capped target. Late RMSE restricts the
+error to cycles with true RUL of at most 50, and the last column to cycles
+with true RUL of at most 125, where capped and true labels agree.
+
+These are model-selection scores. The same folds are used to choose each
+configuration and to report its score, so the scores of the selected
+configurations are optimistic: among several configurations, the one that
+did best on these folds is partly the one that was luckiest on them.
+Grouping by engine prevents leakage between engines, and a small search
+averaged over five folds limits the optimism, but neither removes this
+selection bias. Nested cross validation would remove it; here the
+independent estimate comes instead from the test set, which is scored once
+with the frozen configurations (Section~\ref{sec:evaluation}).
+
+\begin{table*}[t]
+\centering
+\caption{Five fold engine cross validation on FD001 training engines. Rows
+above the line are trained on RUL capped at 125 and scored against it. The
+two rows below the line retrain the best configuration with and without the
+cap and score both against the true RUL, so their RMSE and MAE are
+comparable with each other but not with the rows above; the last column is
+comparable across all rows.}
+\label{tab:cv-results}
+\small
+\begin{tabular}{lllrrrr}
+\hline
+Model & Features & Target & RMSE & MAE & Late RMSE & RMSE, RUL $\le 125$ \\
+\hline
+Mean baseline     & --         & capped   & $41.67 \pm 0.00$ & $36.97 \pm 0.00$ & 63.56 & 43.76 \\
+Linear regression & raw        & capped   & $20.12 \pm 1.54$ & $16.37 \pm 1.29$ & 21.71 & 20.79 \\
+Elastic Net       & raw        & capped   & $20.12 \pm 1.54$ & $16.37 \pm 1.29$ & 21.72 & 20.78 \\
+Random Forest     & raw        & capped   & $16.43 \pm 0.77$ & $11.47 \pm 0.71$ & 15.40 & 18.29 \\
+XGBoost           & raw        & capped   & $16.42 \pm 0.87$ & $11.38 \pm 0.70$ & 15.23 & 18.28 \\
+Linear regression & engineered & capped   & $17.07 \pm 0.78$ & $13.72 \pm 0.63$ & 16.89 & 17.65 \\
+Elastic Net       & engineered & capped   & $17.75 \pm 1.06$ & $14.33 \pm 0.85$ & 17.63 & 18.15 \\
+Random Forest     & engineered & capped   & $14.42 \pm 0.48$ & $9.87 \pm 0.56$  & 10.98 & 15.76 \\
+XGBoost           & engineered & capped   & $\mathbf{13.99} \pm 0.46$ & $\mathbf{9.81} \pm 0.42$ & \textbf{9.88} & \textbf{15.09} \\
+\hline
+XGBoost           & engineered & capped   & $47.47 \pm 2.21$ & $30.38 \pm 0.77$ & 9.88  & 15.09 \\
+XGBoost           & engineered & uncapped & $38.26 \pm 1.41$ & $26.16 \pm 1.65$ & 11.20 & 25.99 \\
+\hline
+\end{tabular}
+\end{table*}
+
+Engineered features improve every model, by 2.0 to 2.4 RMSE, well beyond
+the fold standard deviations. The tree ensembles beat the linear models by
+a wide margin on both feature sets. Degradation in the sensors is
+nonlinear and accelerates near failure. A linear model can follow this only
+to the extent that its features already encode it: the rolling statistics,
+slopes and health index supply part of that structure, which is why linear
+regression improves from 20.12 to 17.07 with them. Trees learn the
+remaining nonlinearity directly, piece by piece. XGBoost on
+engineered features has the lowest error on every metric, though Random
+Forest is within one fold standard deviation on overall RMSE; XGBoost's
+clearer advantage is on late-life cycles (9.88 against 10.98).
+
+All tuned models beat the mean baseline. Against the linear regression
+baseline on raw features, both tree ensembles are better on both feature
+sets and Elastic Net is better on engineered features (17.75 against
+20.12). On raw features Elastic Net and linear regression are tied:
+Elastic Net's RMSE is 0.0006 lower and its MAE 0.0015 higher, far inside
+the fold standard deviation. With 15 features and over 16,000 training
+rows per fold, the linear model is limited by bias rather than variance,
+so the penalty has almost nothing to remove, and at small $\alpha$ Elastic
+Net reduces to least squares. On engineered features, Elastic Net is less
+accurate than unregularised linear regression on the same features (17.75
+against 17.07). The selected penalty is pure L1, which makes the model
+sparse by setting some coefficients exactly to zero, but it does not
+improve predictive accuracy here; Elastic Net's gain over the raw baseline
+comes from the engineered features, not from regularisation.
+
+\subsection{Effect of the RUL cap}
+Capping assumes that degradation is not visible early in life, so a model
+should not be asked to tell 300 remaining cycles from 200. To test this,
+the best configuration was retrained on the uncapped RUL with the same
+folds, and both versions were scored against the true RUL (the last two
+rows of Table~\ref{tab:cv-results}). The answer depends on which cycles
+are scored. On cycles with true RUL of at most 125, the capped model is
+far more accurate (RMSE 15.09 against 25.99), and it is also better on
+late-life cycles (9.88 against 11.20). Over all cycles the uncapped model
+is better (38.26 against 47.47). The capped model never sees a training
+target above 125, so its predictions for young engines stay close to 125
+while their true RUL is several hundred cycles. Capping changes the
+training target rather than bounding the predictions: it concentrates the
+model on the part of life where degradation is visible, trading accuracy
+on early-life cycles, where predictions have little practical use, for
+accuracy close to failure, where maintenance decisions are made. We keep
+the cap for all models.
+
+\subsection{Selected model}
+XGBoost on engineered features, trained on RUL capped at 125, is carried
+forward to the test set with the hyperparameters in
+Table~\ref{tab:search-space}. The selected configuration of every model on
+both feature sets is saved in \texttt{results/best\_params.json}, together
+with the sensor list and window lengths needed to rebuild the features, so
+test evaluation uses exactly the configurations chosen here.

@@ -1,0 +1,105 @@
+{
+  "selection": "lowest mean RMSE, five-fold GroupKFold by unit on training engines",
+  "target_cap": 125,
+  "sensors": [
+    "s_2",
+    "s_3",
+    "s_4",
+    "s_7",
+    "s_8",
+    "s_9",
+    "s_11",
+    "s_12",
+    "s_13",
+    "s_14",
+    "s_15",
+    "s_17",
+    "s_20",
+    "s_21"
+  ],
+  "windows": [
+    5,
+    10,
+    20
+  ],
+  "selected": {
+    "model": "xgboost",
+    "features": "engineered"
+  },
+  "models": {
+    "elastic_net/engineered": {
+      "params": {
+        "alpha": 0.1,
+        "l1_ratio": 1.0,
+        "max_iter": 10000
+      },
+      "rmse_mean": 17.746,
+      "rmse_std": 1.061,
+      "mae_mean": 14.326,
+      "mae_std": 0.848
+    },
+    "random_forest/engineered": {
+      "params": {
+        "n_estimators": 100,
+        "min_samples_leaf": 5,
+        "max_features": 0.5,
+        "max_depth": null
+      },
+      "rmse_mean": 14.42,
+      "rmse_std": 0.482,
+      "mae_mean": 9.875,
+      "mae_std": 0.56
+    },
+    "xgboost/engineered": {
+      "params": {
+        "subsample": 1.0,
+        "reg_lambda": 5,
+        "n_estimators": 400,
+        "max_depth": 4,
+        "learning_rate": 0.05,
+        "colsample_bytree": 0.8
+      },
+      "rmse_mean": 13.988,
+      "rmse_std": 0.461,
+      "mae_mean": 9.805,
+      "mae_std": 0.415
+    },
+    "elastic_net/raw": {
+      "params": {
+        "alpha": 0.1,
+        "l1_ratio": 1.0,
+        "max_iter": 10000
+      },
+      "rmse_mean": 20.119,
+      "rmse_std": 1.542,
+      "mae_mean": 16.37,
+      "mae_std": 1.287
+    },
+    "random_forest/raw": {
+      "params": {
+        "n_estimators": 200,
+        "min_samples_leaf": 1,
+        "max_features": 0.3,
+        "max_depth": 12
+      },
+      "rmse_mean": 16.433,
+      "rmse_std": 0.77,
+      "mae_mean": 11.465,
+      "mae_std": 0.711
+    },
+    "xgboost/raw": {
+      "params": {
+        "subsample": 1.0,
+        "reg_lambda": 5,
+        "n_estimators": 400,
+        "max_depth": 4,
+        "learning_rate": 0.03,
+        "colsample_bytree": 0.5
+      },
+      "rmse_mean": 16.421,
+      "rmse_std": 0.868,
+      "mae_mean": 11.382,
+      "mae_std": 0.697
+    }
+  }
+}
