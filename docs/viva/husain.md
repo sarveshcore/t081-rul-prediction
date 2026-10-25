@@ -331,9 +331,13 @@ biggest weights on `s_11`, `s_9`, `s_12`, `s_4`, `s_7`). Health index +
 single sensors, `s_4`, `s_15`, `s_2` lead SHAP: three of the four the EDA
 saw rising. `s_7` and `s_12` correlate strongly (0.73, 0.75) but rank low,
 because `s_4`, `s_11` and the health index already carry their signal.
-`s_9` and `s_14` had the weakest EDA correlation but rank mid-table: their
-trend goes the "wrong" way in 29% and 40% of engines, which weakens the
-pooled correlation, yet shuffling `s_9` still costs 1.0 to 1.4 cycles.
+`s_9` and `s_14` had the weakest EDA correlation and rank mid-table on
+impurity and SHAP. But on held-out engines `s_9` is XGBoost's most
+important single sensor (1.05 cycles, ahead of `s_15` 1.02 and `s_4` 0.89)
+and Random Forest's second (1.45, behind `s_4` 1.62). Its trend goes the
+"wrong" way in 29% of engines (40% for `s_14`), which weakens the pooled
+correlation but not what the model gets from it. This is the impurity vs
+permutation disagreement in one example.
 
 `cycle` mattering means the model partly predicts from age. Fine on FD001
 (every engine starts healthy, lifetimes 128 to 362), risky on a fleet with
