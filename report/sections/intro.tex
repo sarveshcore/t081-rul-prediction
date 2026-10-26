@@ -1,0 +1,54 @@
+% ABOUTME: Introduction section of the IEEE report.
+% ABOUTME: Motivation for RUL prediction, the C-MAPSS benchmark, our approach, contributions and paper layout.
+\section{Introduction}
+\label{sec:intro}
+
+Maintenance of aircraft engines is either scheduled at fixed intervals or
+triggered by observed condition. Fixed intervals replace parts that still
+have life left, while waiting for a fault risks a failure in service.
+Predicting the remaining useful life (RUL) of an engine, the number of
+operating cycles left before it fails, lets maintenance be planned close to
+the point where it is actually needed. The cost of an error is asymmetric:
+predicting too much remaining life risks an in-service failure, while
+predicting too little only brings maintenance forward.
+
+The NASA Commercial Modular Aero-Propulsion System Simulation (C-MAPSS)
+data~\cite{saxena2008damage} are the standard public benchmark for this
+task. Each engine is simulated from a healthy state with unknown initial
+wear, and 21 sensors and three operating settings are recorded once per
+cycle. Training engines run to failure; test engines are cut off at an
+unknown point, and the true RUL is given only at their last observed cycle.
+We work on the FD001 subset, which has one operating condition and one
+fault mode.
+
+Our approach keeps the learners simple and puts the effort into the
+features and the protocol. From the 14 sensors that vary in FD001 we
+compute, within each engine, rolling means, standard deviations and least
+squares slopes over three window lengths, and a health index learned by
+linear regression. Elastic Net, Random Forest and XGBoost are trained on
+RUL capped at 125 cycles and tuned with five-fold cross validation grouped
+by engine, so that no engine contributes rows to both sides of a split. The
+test set is used once, after every hyperparameter and the choice of model
+are frozen.
+
+The contributions of this report are:
+\begin{itemize}
+\item an engine-level evaluation protocol for FD001 in which feature
+statistics are refitted inside every fold and the test set is scored once,
+with errors reported separately for engines near failure;
+\item a comparison of three regressors on raw and engineered features,
+showing that the engineered features improve every model and account for
+most of the gain over raw sensors;
+\item an analysis of what the tree ensembles rely on, using held-out
+grouped permutation importance and SHAP values, and a comparison of the
+test results with published FD001 models under matched label clipping.
+\end{itemize}
+
+Section~\ref{sec:related} reviews prior work on C-MAPSS.
+Section~\ref{sec:data} describes the data and the choice of sensors and
+target cap, and Section~\ref{sec:evaluation} the evaluation protocol.
+Section~\ref{sec:features} defines the engineered features.
+Section~\ref{sec:models} covers the models, their tuning and what they rely
+on, and Section~\ref{sec:results} reports the test results.
+Section~\ref{sec:discussion} discusses the findings and their limits, and
+Section~\ref{sec:conclusion} concludes with the plan for sequence models.

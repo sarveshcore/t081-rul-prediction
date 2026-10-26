@@ -1,0 +1,83 @@
+% ABOUTME: Discussion and limitations section of the IEEE report.
+% ABOUTME: Interprets the cross validation, test and explainability results and states the limits of the study.
+\section{Discussion and Limitations}
+\label{sec:discussion}
+
+\subsection{Features matter more than the learner}
+The largest single effect in our results is the feature set. Against test
+labels clipped at 125, Random Forest improves from an RMSE of 16.58 on raw
+sensors to 14.02 on engineered features, and XGBoost from 16.37 to 14.08.
+Against the true labels the paired bootstrap interval for XGBoost on
+engineered minus raw features ($-4.4$ to $-0.2$ cycles) excludes zero,
+while the interval for Random Forest minus XGBoost ($-1.3$ to $+1.1$)
+does not. Once the features are fixed, the choice between the two tree
+ensembles makes no measurable difference on 100 test engines. The choice
+between linear and tree models does: on the same engineered features
+Elastic Net reaches 18.27 against 15.36 for XGBoost. The ablation of
+Section~\ref{sec:features} places most of the feature gain on the rolling
+slopes, which give the rate of degradation rather than its level.
+
+\subsection{Accurate near failure, coarse far from it}
+Both ensembles are accurate where maintenance is decided. On the 33 test
+engines with true RUL of at most 50 cycles, the late-stage RMSE is 7.34
+for Random Forest and 7.03 for XGBoost, against 17.88 and 18.11 on the 67
+early-stage engines. Part of the early-stage error is built into the
+target: eleven test engines have a true RUL above the training cap, and
+no model predicts much above 125, so these engines are underestimated by
+construction. This error only brings maintenance forward. The costlier
+error appears between 51 and 75 cycles, where all three models predict too
+late (median error $+9$ to $+14$ cycles), around the point at which
+degradation first becomes visible in the sensors. Late predictions are the
+error that the score $S$ penalises most.
+
+\subsection{Model selection and the test set}
+Cross validation selected XGBoost (RMSE 13.99 against 14.42 for Random
+Forest), while Random Forest is marginally better on the test set (RMSE
+15.23 against 15.36, score 344 against 389). We kept the selection made
+before the test set was opened. The bootstrap interval above shows that the
+test ranking of the two ensembles is within sampling noise, and the score
+gap comes from a few engines predicted more than 20 cycles late (6 for
+Random Forest, 9 for XGBoost). Cross validation and test numbers are not
+directly comparable: cross validation scores every cycle against the
+capped target, whereas the test set scores one cycle per engine against
+the true RUL. The cross validation scores of the selected configurations
+are also optimistic, because the same folds chose and scored them.
+
+\subsection{What the models rely on}
+Held-out permutation importance shows that both ensembles depend mainly on
+two inputs: the health index, whose shuffling raises RMSE by about 11
+cycles for XGBoost and 7.4 for Random Forest, and the cycle number (4.84
+and 5.22). No individual sensor group adds more than 1.62. The sensor
+information therefore reaches the models largely through the health index,
+a single learned combination of all 14 sensors. Reliance on the cycle
+number means the models partly predict from age. This is useful on FD001,
+where every engine starts in normal condition and training lifetimes span
+128 to 362 cycles, but it ties the models to the lifetime distribution of
+this fleet. Impurity and permutation importance also disagree for
+correlated inputs: \texttt{s\_4} receives 26\% of Random Forest's impurity
+reduction but costs only 1.62 cycles when shuffled, so impurity rankings
+alone would overstate its role.
+
+\subsection{Gap to deep sequence models}
+Four published deep models are more accurate than our best model by 0.8
+to 1.4 cycles of RMSE against clipped labels, and on the score $S$ six
+published models do better than our Random Forest. These models learn
+features from windows of the raw sensor sequence. Our features look back
+at most 20 cycles and use window lengths chosen by hand, so they cannot
+represent how long a sensor has been drifting or when its drift began to
+accelerate. The remaining gap is consistent with this limit, although our
+experiments do not isolate it.
+
+\subsection{Limitations}
+All results are on FD001, which has a single operating condition and a
+single fault mode. The regime normalisation of Section~\ref{sec:features}
+reduces to a z-score here and has not been tested on the multi-condition
+subsets. The test set has 100 engines with one prediction each, so the
+test metrics carry wide sampling intervals, as the bootstrap shows; the
+late stage contains only 33 engines. The cap of 125 cycles bounds what the
+models can predict, so engines with more remaining life are always
+underestimated. Published FD001 results differ in protocol details that
+are not always reported, such as whether test labels are clipped and the
+window length used, so the comparison with them is approximate. Finally,
+C-MAPSS is simulated, and conclusions about which sensors matter apply to
+the simulation rather than to physical engines.

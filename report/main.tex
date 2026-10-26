@@ -1,0 +1,56 @@
+% ABOUTME: Main document of the Phase 1 IEEE conference report for team T081.
+% ABOUTME: Title, authors and abstract; every section is a fragment under sections/.
+\documentclass[conference]{IEEEtran}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{cite}
+
+\begin{document}
+
+\title{Remaining Useful Life Prediction on NASA C-MAPSS FD001 with Engineered Degradation Features}
+
+\author{\IEEEauthorblockN{Sarvesh Srinath, Trishit Swarnakar, Aryan Kumar,
+Husain Khorakiwala and Navodit Sharma}
+\IEEEauthorblockA{Team T081, Section E, CSAI Project 7\\
+% Team to confirm: institution name and contact e-mail addresses
+}}
+
+\maketitle
+
+\begin{abstract}
+We predict the remaining useful life (RUL) of turbofan engines in the FD001
+subset of NASA C-MAPSS from their multivariate sensor histories. Rolling
+means, standard deviations and least squares slopes over windows of 5, 10
+and 20 cycles, together with a learned health index, are computed within
+each engine. Elastic Net, Random Forest and XGBoost are tuned with
+five-fold cross validation grouped by engine on RUL capped at 125 cycles,
+and the 100 test engines are scored once, at their last observed cycle,
+after every choice is frozen. The selected XGBoost model reaches a test
+RMSE of 15.36 cycles and a late-stage RMSE of 7.03 cycles on engines within
+50 cycles of failure. Against test labels clipped at 125, Random Forest and
+XGBoost reach RMSE 14.02 and 14.08, improving on published Random Forest
+and gradient boosting results and trailing the best published deep models
+by 0.8 to 1.4 cycles. Most of the gain over raw sensors comes from the
+engineered features rather than the choice of learner.
+\end{abstract}
+
+\begin{IEEEkeywords}
+remaining useful life, prognostics, C-MAPSS, feature engineering, gradient
+boosting, random forest, SHAP
+\end{IEEEkeywords}
+
+\input{sections/intro}
+\input{sections/related}
+\input{sections/data}
+\input{sections/evaluation}
+\input{sections/features}
+\input{sections/models}
+\input{sections/results}
+\input{sections/discussion}
+\input{sections/conclusion}
+\input{sections/contributions}
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+
+\end{document}
