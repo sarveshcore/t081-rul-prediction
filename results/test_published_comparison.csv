@@ -1,6 +1,6 @@
 method,source,rmse,nasa_score,where
 1D CNN,Li et al. 2018,12.61,274.0,published
-Random Forest (ours),engineered features,14.023325572378523,309.5353463971359,this project
+Random Forest (ours),engineered features,14.023325572378523,309.5353463971358,this project
 XGBoost (ours),engineered features,14.080023435298283,346.9564947030902,this project
 Gradient Boosting,Zhang et al. 2017,15.67,474.0,published
 Deep LSTM,Zheng et al. 2017,16.14,338.0,published
