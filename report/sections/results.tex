@@ -110,45 +110,58 @@ equal.
 \end{figure}
 
 \subsection{Comparison with published results}
-Published FD001 results train on RUL capped at 125 and score one prediction
-per test engine, as we do, but many also clip the test labels at the cap.
-For a like for like comparison we rescore our models against the test RUL
-clipped at 125. Table~\ref{tab:published} lists published values as
-collected by Ragab et al.~\cite{ragab2020attention}. On these terms Random
-Forest (RMSE 14.02) and XGBoost (14.08) improve on the published Random
-Forest (17.91) and gradient boosting (15.67) results of Zhang et
-al.~\cite{zhang2017modbne}, on the 2D CNN of Babu et
-al.~\cite{babu2016cnn} and on the deep LSTM of Zheng et
-al.~\cite{zheng2017lstm}. Our own raw feature models score 16.58 and 16.37
-against the same labels, so in our setting most of the improvement comes
-from the engineered features rather than the learner.
+Published FD001 results typically train on RUL capped at 125 and score one
+prediction per test engine, as we do, but many also clip the test labels at
+the cap. For a like for like comparison we rescore our models against the
+test RUL clipped at 125. Table~\ref{tab:published} lists every FD001 result
+with both RMSE and score collected by Ragab et al.~\cite{ragab2020attention},
+except an SVM baseline (RMSE 40.72). By RMSE our Random Forest (14.02) and
+XGBoost (14.08) rank fifth and sixth. They improve on the published Random
+Forest (17.91) and gradient boosting (15.67) of Zhang et
+al.~\cite{zhang2017modbne} and on six deep models, from CNN-LSTM (14.40) to
+the 2D CNN of Babu et al.~\cite{babu2016cnn} (18.45). Our own raw feature
+models score 16.58 and 16.37 against the same labels, so in our setting most
+of the improvement comes from the engineered features rather than the
+learner.
 
-We are worse than the 1D CNN of Li et al.~\cite{li2018dcnn}, by about 1.4
-cycles of RMSE, and worse than more recent hybrid and attention models such
-as that of Ragab et al.~\cite{ragab2020attention} (12.63). These models learn
-features from windows of the raw sensor sequence; phase 2 of this project
-tests sequence models of this kind. Published protocols differ in details
-that are not always reported, such as window length, so differences of a
-fraction of a cycle should not be over read.
+Four published deep models are more accurate: the 1D CNN of Li et
+al.~\cite{li2018dcnn} (12.61), the attention model of Ragab et
+al.~\cite{ragab2020attention} (12.63), HDNN (13.02) and BLCNN (13.18), between
+0.8 and 1.4 cycles of RMSE ahead of our Random Forest. On the score $S$ our
+position is weaker: six published models score lower than our Random
+Forest (310), including BiLSTM-ED and CNN-LSTM, whose RMSE is higher than
+ours but whose predictions are less often badly late. The models ahead of
+ours learn features from windows of the raw sensor sequence; phase 2 of this
+project tests sequence models of this kind. Published protocols differ in
+details that are not always reported, such as window length, so differences
+of a fraction of a cycle should not be over read.
 
 \begin{table}[t]
 \centering
 \caption{FD001 test results against labels clipped at 125; ours use the
-engineered features. Published values
-as collected in \cite{ragab2020attention}.}
+engineered features. Published values as collected in
+\cite{ragab2020attention}, Table III, which cites the original papers for
+rows without a reference here.}
 \label{tab:published}
 \begin{tabular}{lrr}
 \hline
 Method & RMSE & Score $S$ \\
 \hline
-1D CNN \cite{li2018dcnn}            & 12.61 & 274 \\
-Random Forest (ours)                & 14.02 & 310 \\
-XGBoost (ours)                      & 14.08 & 347 \\
+1D CNN \cite{li2018dcnn}             & 12.61 & 274 \\
+ATS2S \cite{ragab2020attention}      & 12.63 & 243 \\
+HDNN                                 & 13.02 & 245 \\
+BLCNN                                & 13.18 & 302 \\
+Random Forest (ours)                 & 14.02 & 310 \\
+XGBoost (ours)                       & 14.08 & 347 \\
+CNN-LSTM                             & 14.40 & 290 \\
+BiLSTM-ED                            & 14.74 & 273 \\
+LSTMBS                               & 14.89 & 481 \\
+MODBNE \cite{zhang2017modbne}        & 15.04 & 334 \\
 Gradient boosting \cite{zhang2017modbne} & 15.67 & 474 \\
-Deep LSTM \cite{zheng2017lstm}      & 16.14 & 338 \\
-Elastic Net (ours)                  & 17.01 & 469 \\
+Deep LSTM \cite{zheng2017lstm}       & 16.14 & 338 \\
+Elastic Net (ours)                   & 17.01 & 469 \\
 Random Forest \cite{zhang2017modbne} & 17.91 & 480 \\
-2D CNN \cite{babu2016cnn}           & 18.45 & 1287 \\
+2D CNN \cite{babu2016cnn}            & 18.45 & 1287 \\
 \hline
 \end{tabular}
 \end{table}

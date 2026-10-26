@@ -1,7 +1,14 @@
 method,source,rmse,nasa_score,where
 1D CNN,Li et al. 2018,12.61,274.0,published
-Random Forest (ours),engineered features,14.023325572378523,309.5353463971358,this project
+ATS2S,Ragab et al. 2020,12.63,243.0,published
+HDNN,Al-Dulaimi et al. 2019,13.02,245.0,published
+BLCNN,Liu et al. 2019,13.18,302.0,published
+Random Forest (ours),engineered features,14.02332557237852,309.5353463971357,this project
 XGBoost (ours),engineered features,14.080023435298283,346.9564947030902,this project
+CNN-LSTM,Wu et al. 2019,14.4,290.0,published
+BiLSTM-ED,Yu et al. 2019,14.74,273.0,published
+LSTMBS,Liao et al. 2018,14.89,481.0,published
+MODBNE,Zhang et al. 2017,15.04,334.0,published
 Gradient Boosting,Zhang et al. 2017,15.67,474.0,published
 Deep LSTM,Zheng et al. 2017,16.14,338.0,published
 Elastic Net (ours),engineered features,17.014291520660418,469.12868422170203,this project

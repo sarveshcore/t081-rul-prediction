@@ -182,10 +182,16 @@ is exponential in lateness. XGBoost has 9 predictions more than 20 cycles
 late, Random Forest 6. Those few engines drive the score.
 
 *How do you compare with published work?* Against labels clipped at 125,
-like the papers: our RF 14.02 and XGBoost 14.08 beat published RF (17.91)
-and gradient boosting (15.67) from Zhang et al. 2017, the 2D CNN (18.45)
-and the deep LSTM (16.14). We are about 1.4 cycles behind Li et al.'s 1D
-CNN (12.61). Values as collected in Ragab et al. 2020, Table III.
+like the papers, using every FD001 row with RMSE and score in Ragab et al.
+2020, Table III (except an SVM baseline). By RMSE our RF (14.02) and
+XGBoost (14.08) come fifth and sixth out of 14. We beat published RF
+(17.91) and gradient boosting (15.67) from Zhang et al. 2017, and six of the
+ten deep models, from CNN-LSTM (14.40) to the 2D CNN (18.45). Four deep
+models beat us by 0.8 to 1.4 cycles: Li et al.'s 1D CNN (12.61), ATS2S
+(12.63), HDNN (13.02) and BLCNN (13.18). On the NASA score we look worse:
+six published models score below our RF's 310, including BiLSTM-ED (273)
+and CNN-LSTM (290), which have worse RMSE than us but fewer badly late
+predictions.
 
 *Where are the errors worst?* Far from failure and above the cap. Close to
 failure (true RUL 25 or less) the ensembles are within about 7 cycles. From

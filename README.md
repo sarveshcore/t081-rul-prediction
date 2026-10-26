@@ -26,9 +26,10 @@ true RUL of 50 cycles or fewer (33 engines).
 
 Random Forest and XGBoost are tied: a paired bootstrap over the test engines puts the RMSE
 gap between them inside its 95% interval. Against test labels clipped at 125, as many
-published FD001 results are scored, XGBoost reaches RMSE 14.08. That beats published
-Random Forest, gradient boosting and early deep learning results, and is about 1.4 cycles
-behind the 1D CNN of Li et al. (12.61). See `report/sections/results.tex`.
+published FD001 results are scored, Random Forest reaches RMSE 14.02 and XGBoost 14.08.
+That beats published Random Forest, gradient boosting and six of ten published deep
+models, and is 0.8 to 1.4 cycles behind four deep models (RMSE 12.61 to 13.18). On the
+NASA score, six published models do better. See `report/sections/results.tex`.
 
 ## Reproduce
 
