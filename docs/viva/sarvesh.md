@@ -131,7 +131,67 @@ Yes. It can be accurate on healthy engines (most of the data) and miss
 badly near failure. That is why we report late stage error and the NASA
 score next to RMSE.
 
+## Test results (#6)
+
+Notebook `notebooks/04_results.ipynb`, numbers in `results/test_metrics.csv`,
+report `report/sections/results.tex`.
+
+**What I did.** I refitted every frozen configuration from
+`results/best_params.json` on all 100 training engines (target capped at
+125), fitted the feature statistics on training engines only, built
+features over each test engine's whole observed history, and predicted
+once per engine at its last cycle with `predict_last_cycle`. Scored once,
+against the true RUL. Nothing was tuned after.
+
+**Headline numbers (true RUL, 100 engines).**
+
+| Model (engineered) | RMSE | MAE | NASA score | Late RMSE |
+|---|---|---|---|---|
+| XGBoost (selected) | 15.36 | 11.26 | 389 | 7.03 |
+| Random Forest | 15.23 | 11.33 | 344 | 7.34 |
+| Elastic Net | 18.27 | 14.11 | 522 | 14.83 |
+| Mean baseline | 43.07 | 35.90 | 33629 | 64.09 |
+
+XGBoost wins on late stage RMSE (7.03), Random Forest on overall RMSE and
+the NASA score.
+
+**Likely questions.**
+
+*Random Forest beat your selected model. Why not switch?* Because picking
+the winner after looking at the test set turns the test set into a second
+validation set, and the reported error stops being an honest estimate for
+new engines. Also the gap is noise: a paired bootstrap (resample the 100
+engines 10,000 times, score both models on the same resample) gives a 95%
+interval of −1.3 to +1.1 cycles for the RMSE difference. Zero is inside, so
+they are tied.
+
+*What is a paired bootstrap?* Draw 100 engines with replacement, compute
+both models' RMSE on that same draw, take the difference, repeat. "Paired"
+means both models see the same engines each time, so engine difficulty
+cancels out and only the model difference is left.
+
+*Why is test RMSE (15.36) higher than CV RMSE (13.99)?* They score
+different things. CV scores every cycle of held-out engines against the
+capped label. The test scores one cycle per engine against the true,
+uncapped label. 11 test engines have true RUL above 125, and a model
+trained on a cap cannot predict above it, so those cost about 25 cycles
+each. Against labels clipped at 125 the test RMSE is 14.08, close to CV.
+
+*Why do the two ensembles differ on the NASA score but not RMSE?* The score
+is exponential in lateness. XGBoost has 9 predictions more than 20 cycles
+late, Random Forest 6. Those few engines drive the score.
+
+*How do you compare with published work?* Against labels clipped at 125,
+like the papers: our RF 14.02 and XGBoost 14.08 beat published RF (17.91)
+and gradient boosting (15.67) from Zhang et al. 2017, the 2D CNN (18.45)
+and the deep LSTM (16.14). We are about 1.4 cycles behind Li et al.'s 1D
+CNN (12.61). Values as collected in Ragab et al. 2020, Table III.
+
+*Where are the errors worst?* Far from failure and above the cap. Close to
+failure (true RUL 25 or less) the ensembles are within about 7 cycles. From
+51 to 75 cycles all models predict too late, which is where degradation
+just starts to show.
+
 ## Things I must check before the viva
-- Our final numbers from `results/test_metrics.csv` (#6), and which model
-  wins on late stage RMSE.
-- How our RMSE compares with the published FD001 results (Navodit, #8).
+- That Navodit's literature review (#8) cites the same published numbers
+  as `results/test_published_comparison.csv`.
