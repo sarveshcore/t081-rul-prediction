@@ -197,7 +197,7 @@ XGBoost           & engineered & uncapped & $38.26 \pm 1.41$ & $26.16 \pm 1.65$ 
 \end{tabular}
 \end{table*}
 
-Engineered features improve every model, by 2.0 to 2.4 RMSE, well beyond
+Engineered features improve every model, by 2.0 to 3.1 RMSE, well beyond
 the fold standard deviations. The tree ensembles beat the linear models by
 a wide margin on both feature sets. Degradation in the sensors is
 nonlinear and accelerates near failure. A linear model can follow this only
@@ -327,10 +327,11 @@ lower it. Every slope among the top 20 columns uses the 20-cycle window.
 
 Elastic Net standardises its inputs, so its coefficients are comparable in
 size. At the selected penalty ($\alpha = 0.001$) no coefficient is zero,
-and the largest after the health index are rolling means of one sensor
-over two windows with opposite signs (\texttt{s\_11\_mean\_20} $+22.5$,
-\texttt{s\_11\_mean\_10} $-20.1$). Together they act as a trend estimate,
-and neither sign means anything alone. Strengthening a pure L1 penalty
+and among the largest after the health index are pairs of rolling means
+of one sensor over two windows with opposite signs, such as
+\texttt{s\_11\_mean\_20} $+22.5$ with \texttt{s\_11\_mean\_10} $-20.1$,
+or \texttt{s\_12\_mean\_20} $-21.1$ with \texttt{s\_12\_mean\_10} $+16.3$.
+Each pair acts as a trend estimate, and neither sign means anything alone. Strengthening a pure L1 penalty
 zeroes 38 coefficients at $\alpha = 0.1$ and 116 at $\alpha = 1$. The
 single-cycle sensor readings are dropped first, as noisier copies of
 their 5-cycle means, but every sensor keeps at least one column even at
@@ -343,8 +344,8 @@ The models do rely on the sensors the exploratory analysis found
 degrading, but mostly through the health index, a linear combination of
 all 14 sensors whose largest weights are on \texttt{s\_11}, \texttt{s\_9},
 \texttt{s\_12}, \texttt{s\_4} and \texttt{s\_7}. Among individual sensors,
-\texttt{s\_4}, \texttt{s\_15} and \texttt{s\_2}, three of the four that
-rise towards failure, lead XGBoost's SHAP ranking. \texttt{s\_7} and
+\texttt{s\_4}, \texttt{s\_15} and \texttt{s\_2}, all of which rise
+towards failure, lead XGBoost's SHAP ranking. \texttt{s\_7} and
 \texttt{s\_12} correlate strongly with RUL but rank low, since their
 information is largely duplicated by \texttt{s\_4}, \texttt{s\_11} and the
 health index. Reliance on \texttt{cycle}, second under SHAP and permutation
