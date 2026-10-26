@@ -192,7 +192,7 @@ the Phase 2 motivation.
   gradient boosting comes from the features rather than the learner.
 - **Importance (Husain, #7):** the health index is ranked **#1 by every
   measure** for both ensembles. Shuffling it on held-out engines raises
-  XGBoost's RMSE by 10.96 cycles (Random Forest by 7.36). `cycle` is second
+  XGBoost's RMSE by 10.95 cycles (Random Forest by 7.36). `cycle` is second
   (4.84 and 5.22). By family, rolling means and the HI take most of the
   credit; 10-cycle windows get the most importance in the forest.
 
@@ -264,7 +264,7 @@ rolling means and slopes already carry most of the same information. Its
 *marginal* gain over them is small (within fold noise). Importance shares
 credit among correlated features: the HI is one column that summarises all
 14 sensors, so the trees split on it first and it collects the credit that
-was spread over many sensor columns before. Permutation importance (+10.96
+was spread over many sensor columns before. Permutation importance (+10.95
 RMSE when shuffled) says the model relies on it *as trained*, not that the
 information is unavailable elsewhere. Slopes show the reverse: a big
 ablation gain but small importance, because once the HI exists, it and the
