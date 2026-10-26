@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from rul.evaluate import evaluate, nasa_score
+from rul.evaluate import evaluate, nasa_score, predict_last_cycle
 
 
 def test_nasa_early_and_late():
@@ -72,3 +72,25 @@ def test_accepts_column_vector_predictions():
 def test_rejects_length_mismatch():
     with pytest.raises(ValueError):
         evaluate([10, 20, 30], [12])
+
+
+class _CycleModel:
+    """Predicts each row's cycle number, so the chosen row is visible in the output."""
+
+    def predict(self, X):
+        return X["cycle"].to_numpy(dtype=float)
+
+
+def test_predict_last_cycle_uses_each_units_final_cycle_in_any_row_order():
+    df = pd.DataFrame({"unit": [2, 1, 2, 1, 1], "cycle": [7, 3, 5, 1, 2]})
+    pred = predict_last_cycle(_CycleModel(), df, ["cycle"])
+    assert list(pred.index) == [1, 2]
+    assert pred.index.name == "unit"
+    assert pred.tolist() == [3.0, 7.0]
+
+
+def test_predict_last_cycle_index_can_align_with_test_rul():
+    df = pd.DataFrame({"unit": [3, 1, 2], "cycle": [4, 9, 6]})
+    test_rul = pd.Series([10, 20, 30], index=pd.Index([1, 2, 3], name="unit"))
+    pred = predict_last_cycle(_CycleModel(), df, ["cycle"])
+    assert pred.index.equals(test_rul.index)

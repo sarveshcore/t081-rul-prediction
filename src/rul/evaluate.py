@@ -1,6 +1,9 @@
 # ABOUTME: Metrics for remaining useful life predictions on C-MAPSS.
 # ABOUTME: RMSE, MAE, the NASA asymmetric score, and early vs late stage error.
 import numpy as np
+import pandas as pd
+
+from rul.split import last_cycle
 
 
 def nasa_score(y_true, y_pred) -> float:
@@ -36,3 +39,9 @@ def evaluate(y_true, y_pred, late_cut: int = 50) -> dict:
         "rmse_late": rmse_late,
         "mae_late": mae_late,
     }
+
+
+def predict_last_cycle(model, df: pd.DataFrame, features: list[str]) -> pd.Series:
+    """Predict RUL once per unit at its final cycle, indexed by sorted unit to match test RUL."""
+    last = last_cycle(df).set_index("unit").sort_index()
+    return pd.Series(model.predict(last[features]), index=last.index, name="rul_pred")
