@@ -55,8 +55,8 @@ results among them.
 in~\cite{ragab2020attention}, Table III, except SVR, which is
 from~\cite{babu2016cnn}. Ours is scored against test labels clipped at 125,
 as in Table~\ref{tab:published}. Cap is the maximum of the training
-target. A dash marks a setting not stated in~\cite{babu2016cnn}
-or~\cite{ragab2020attention}.}
+target. A dash marks a setting not stated in~\cite{babu2016cnn},
+\cite{li2018dcnn} or~\cite{ragab2020attention}.}
 \label{tab:related}
 \footnotesize
 \begin{tabular}{llrl}
@@ -68,7 +68,7 @@ Random Forest \cite{zhang2017modbne}   & --                    & 17.91 & -- \\
 Grad.\ boosting \cite{zhang2017modbne} & --                    & 15.67 & -- \\
 2D CNN \cite{babu2016cnn}              & sensors, 15 cycles    & 18.45 & yes \\
 Deep LSTM \cite{zheng2017lstm}         & sensor sequence       & 16.14 & -- \\
-1D CNN \cite{li2018dcnn}               & sensor windows        & 12.61 & -- \\
+1D CNN \cite{li2018dcnn}               & 14 sensors, 30 cycles & 12.61 & 125 \\
 ATS2S \cite{ragab2020attention}        & 14 sensors, 30 cycles & 12.63 & 125 \\
 XGBoost (ours)                         & engineered            & 14.08 & 125 \\
 \hline
