@@ -33,15 +33,16 @@ pytest
 ```
 
 Then `make all` runs ruff, pytest and every notebook in `notebooks/` in numeric order,
-regenerating `results/` and `figures/`. It stops at the first notebook that fails.
+regenerating `results/` and `figures/` (about 11 minutes on an Apple M3 Pro). It stops at
+the first notebook that fails.
 Without `make` (for example on Windows), run the notebooks by hand in numeric order.
 
 ## Layout
 
 ```
 data/raw/        C-MAPSS FD001 text files
-src/rul/         data, split, features, models, evaluate
-notebooks/       01_eda, 02_features, 03_models, 04_results
+src/rul/         data, split, features, models, evaluate, explain
+notebooks/       01_eda, 02_features, 03_models, 04_results, 05_explain
 tests/           pytest checks for leakage and correctness
 figures/         plots used by the report and slides
 results/         metrics and chosen hyperparameters
