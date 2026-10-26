@@ -1,0 +1,90 @@
+% ABOUTME: Related work section of the IEEE report (issue #8).
+% ABOUTME: C-MAPSS, the capped RUL target, classical and deep FD001 models, and the gap tested here.
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Benchmark and target}
+C-MAPSS simulates run-to-failure trajectories of aircraft turbofan engines
+with modelled damage propagation~\cite{saxena2008damage}. Its FD001
+subset is the simplest of the four: one operating condition, one fault mode
+(high-pressure compressor degradation), and 100 training and 100 test
+engines. Training engines run until failure; each test engine stops at an
+unknown point before failure and its true RUL at that cycle is given
+separately.
+
+A linear RUL target implies that an engine degrades at a constant rate from
+its first cycle, which the sensors do not show. Heimes~\cite{heimes2008rnn},
+who estimated RUL with recurrent neural networks, proposed the
+piecewise-linear target used in much of the later
+work~\cite{babu2016cnn,ragab2020attention}: the target is held at a
+constant maximum early in life and falls linearly to zero at failure. The
+maximum is chosen from the data and differs between
+subsets~\cite{babu2016cnn}; Ragab et al.\ use 125 cycles for FD001 and
+FD003 and 130 for FD002 and FD004~\cite{ragab2020attention}. We cap
+training targets at 125.
+
+\subsection{Classical models}
+Early data-driven methods for this benchmark include similarity-based
+prognostics~\cite{wang2008similarity}. In the experiments of Babu et
+al.~\cite{babu2016cnn}, support vector regression reached an RMSE of 20.96
+cycles on FD001, ahead of relevance vector regression (23.80) and a
+multilayer perceptron (37.56). Zhang et al.~\cite{zhang2017modbne} report
+17.91 for a Random Forest and 15.67 for gradient boosting, against 15.04
+for their ensemble of deep belief networks. These tree ensembles are the
+closest published counterparts of our models.
+
+\subsection{Deep sequence models}
+Deep models take a window of normalised sensor readings as input and learn
+their own features. Babu et al.~\cite{babu2016cnn} applied a convolutional
+network along the time axis of 15-cycle windows (RMSE 18.45). Zheng et
+al.~\cite{zheng2017lstm} used a long short-term memory
+(LSTM)~\cite{hochreiter1997lstm} network, whose gated memory cells can carry
+information over long time lags (16.14). Li et al.~\cite{li2018dcnn}
+used a one-dimensional CNN with multiple input channels; at 12.61 it has
+the lowest FD001 RMSE in the comparison of Ragab et
+al.~\cite{ragab2020attention}. Ragab et al.\ add an attention mechanism
+to an LSTM encoder-decoder over 30-cycle windows of 14 sensors and reach
+12.63, with the lowest score $S$ (Section~\ref{sec:evaluation}) in that
+comparison. Table~\ref{tab:related} summarises these methods;
+Table~\ref{tab:published} in Section~\ref{sec:results} places our test
+results among them.
+
+\begin{table}[t]
+\centering
+\caption{Representative FD001 methods. RMSE values are those collected
+in~\cite{ragab2020attention}, Table III, except SVR, which is
+from~\cite{babu2016cnn}. Ours is scored against test labels clipped at 125,
+as in Table~\ref{tab:published}. Cap is the maximum of the training
+target. A dash marks a setting not stated in~\cite{babu2016cnn}
+or~\cite{ragab2020attention}.}
+\label{tab:related}
+\footnotesize
+\begin{tabular}{llrl}
+\hline
+Method & Input & RMSE & Cap \\
+\hline
+SVR \cite{babu2016cnn}                 & --                    & 20.96 & -- \\
+Random Forest \cite{zhang2017modbne}   & --                    & 17.91 & -- \\
+Grad.\ boosting \cite{zhang2017modbne} & --                    & 15.67 & -- \\
+2D CNN \cite{babu2016cnn}              & sensors, 15 cycles    & 18.45 & yes \\
+Deep LSTM \cite{zheng2017lstm}         & sensor sequence       & 16.14 & -- \\
+1D CNN \cite{li2018dcnn}               & sensor windows        & 12.61 & -- \\
+ATS2S \cite{ragab2020attention}        & 14 sensors, 30 cycles & 12.63 & 125 \\
+XGBoost (ours)                         & engineered            & 14.08 & 125 \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Gap addressed}
+The most accurate FD001 results come from models that learn features from
+raw sensor windows. This work asks how far hand-built degradation features
+take classical models. For each of the 14 informative sensors we compute
+the rolling mean, standard deviation and least squares slope over 5, 10
+and 20 cycles, after operating regime normalisation, and keep the
+normalised readings, the cycle number and a regression-based health index
+(Section~\ref{sec:features}). Elastic Net, Random Forest and XGBoost are
+trained on these features and tuned with cross validation grouped by
+engine, so that no engine appears in both the training and validation
+folds and the validation error is not inflated by near-duplicate cycles
+(Section~\ref{sec:evaluation}). Sequence models of the kind discussed
+above are the subject of the second phase of the project.
