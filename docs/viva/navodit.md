@@ -180,7 +180,7 @@ same. The cap says "healthy, 125" until wear shows, then counts down. It
 only changes training labels. On the test set our headline is scored
 against the true RUL (XGBoost 15.36). Eleven test engines have true RUL
 above 125 (up to 145); the model can't predict much above 125, so it
-underestimates them by about 25 cycles. That is the safe direction (early
+underestimates them by about 23 cycles. That is the safe direction (early
 maintenance).
 
 **3. Why report the NASA score as well as RMSE?**
@@ -202,7 +202,7 @@ real?**
 Both, scored against different labels. 15.36 is against the true RUL,
 which is our honest number. Many papers also clip the test labels at 125,
 so to compare like for like we rescore the same predictions against
-clipped labels: 14.08. The gap is mostly the 11 engines whose true RUL is
+clipped labels: 14.08. The gap is entirely the 11 engines whose true RUL is
 above 125. Comparing our 15.36 with a paper's clipped number would be
 unfair to us; comparing our 14.08 with an unclipped number would be unfair
 to them.
