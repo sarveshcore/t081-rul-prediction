@@ -41,7 +41,7 @@ Without `make` (for example on Windows), run the notebooks by hand in numeric or
 
 ```
 data/raw/        C-MAPSS FD001 text files
-src/rul/         data, split, features, models, evaluate, explain
+src/rul/         data, eda, split, features, models, evaluate, explain
 notebooks/       01_eda, 02_features, 03_models, 04_results, 05_explain
 tests/           pytest checks for leakage and correctness
 figures/         plots used by the report and slides
