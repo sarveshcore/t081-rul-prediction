@@ -3,17 +3,20 @@
 \section{Discussion and Limitations}
 \label{sec:discussion}
 
-\subsection{Features matter more than the learner}
-The largest single effect in our results is the feature set. Against test
-labels clipped at 125, Random Forest improves from an RMSE of 16.58 on raw
-sensors to 14.02 on engineered features, and XGBoost from 16.37 to 14.08.
-Against the true labels the paired bootstrap interval for XGBoost on
-engineered minus raw features ($-4.4$ to $-0.2$ cycles) excludes zero,
-while the interval for Random Forest minus XGBoost ($-1.3$ to $+1.1$)
-does not. Once the features are fixed, the choice between the two tree
-ensembles makes no measurable difference on 100 test engines. The choice
-between linear and tree models does: on the same engineered features
-Elastic Net reaches 18.27 against 15.36 for XGBoost. The ablation of
+\subsection{Features and learners}
+Both the feature set and the model family matter. Against the true test
+labels, engineered features lower the RMSE by 2.22 cycles for XGBoost,
+2.54 for Random Forest and 4.30 for Elastic Net, while replacing Elastic
+Net with XGBoost lowers it by 4.99 on raw features and 2.91 on engineered
+features; cross validation shows the same pattern. The paired bootstrap
+interval for XGBoost on engineered minus raw features ($-4.4$ to $-0.2$
+cycles) excludes zero, while the interval for Random Forest minus XGBoost
+($-1.3$ to $+1.1$) does not, so once the features are fixed the choice
+between the two tree ensembles makes no measurable difference on 100 test
+engines. Our margin over the published Random Forest~\cite{zhang2017modbne}
+comes mainly from the features: against labels clipped at 125 our Random
+Forest scores 16.58 on raw sensors and 14.02 on engineered features,
+against 17.91 published. The ablation of
 Section~\ref{sec:features} places most of the feature gain on the rolling
 slopes, which give the rate of degradation rather than its level.
 

@@ -11,9 +11,9 @@ cycles overall and 7.03 cycles on engines within 50 cycles of failure.
 Against labels clipped at 125, Random Forest and XGBoost reach 14.02 and
 14.08, ahead of published Random Forest and gradient boosting results and
 0.8 to 1.4 cycles behind the best published deep models. The engineered
-features account for most of the improvement over raw sensors, the two
-tree ensembles cannot be separated on the test set, and both rely mainly on
-the health index and the cycle number.
+features and the tree ensembles both improve on the linear models with raw
+sensors, the two tree ensembles cannot be separated on the test set, and
+both rely mainly on the health index and the cycle number.
 
 Phase 2 replaces the fixed 20-cycle summaries with models that read the
 sensor sequence directly: an LSTM, a temporal convolutional network or a

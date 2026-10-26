@@ -37,8 +37,9 @@ The contributions of this report are:
 statistics are refitted inside every fold and the test set is scored once,
 with errors reported separately for engines near failure;
 \item a comparison of three regressors on raw and engineered features,
-showing that the engineered features improve every model and account for
-most of the gain over raw sensors;
+showing that the engineered features and the move from linear to tree
+models each improve the RMSE by several cycles, while the two tree
+ensembles cannot be separated;
 \item an analysis of what the tree ensembles rely on, using held-out
 grouped permutation importance and SHAP values, and a comparison of the
 test results with published FD001 models under matched label clipping.
