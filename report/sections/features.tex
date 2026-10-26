@@ -49,9 +49,11 @@ every fold on that fold's training engines.
 For window length $w \in \{5, 10, 20\}$ and the set $W_t$ of the last
 $\min(w, t)$ cycles of the same engine, with $n = |W_t|$,
 \begin{equation}
-m^{(w)}_{t,j} = \frac{1}{n}\sum_{\tau \in W_t} z_{\tau,j}, \qquad
-\sigma^{(w)}_{t,j} = \sqrt{\frac{1}{n - 1}\sum_{\tau \in W_t}
+\begin{aligned}
+m^{(w)}_{t,j} &= \frac{1}{n}\sum_{\tau \in W_t} z_{\tau,j},\\
+\sigma^{(w)}_{t,j} &= \sqrt{\frac{1}{n - 1}\sum_{\tau \in W_t}
 \bigl(z_{\tau,j} - m^{(w)}_{t,j}\bigr)^2}.
+\end{aligned}
 \end{equation}
 The mean filters measurement noise and estimates the current level of
 degradation; the standard deviation measures how erratic the sensor has
