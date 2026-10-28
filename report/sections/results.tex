@@ -14,8 +14,8 @@ history, and the model predicts once per engine at its last observed cycle
 (Section~\ref{sec:evaluation}). Predictions are scored against the true,
 uncapped RUL. The overall and stage metrics are taken from
 \texttt{results/test\_metrics.csv} and the published comparison from
-\texttt{results/test\_published\_comparison.csv}; the bootstrap intervals
-and the error by RUL bucket are computed in \texttt{notebooks/04\_results.ipynb}.
+\texttt{results/test\_published\_comparison.csv}; the bootstrap intervals,
+the error by RUL bucket and the per-engine terms of $S$ are computed in \texttt{notebooks/04\_results.ipynb}.
 
 \begin{table*}[t]
 \centering
@@ -81,8 +81,8 @@ failure but about twice as inaccurate in the late stage, which is where the
 trees gain most. Between 51 and 75 cycles all three models predict too late
 (median error $+9$ to $+14$ cycles), around the point where degradation first
 becomes visible in the sensors. Eleven test engines have a true RUL above
-the training cap (up to 145). No model predicts much above 125, because no
-training target was larger, so these engines are underestimated by 23 to
+the training cap (up to 145). No model on engineered features predicts above 130, because no
+training target was larger than 125, so these engines are underestimated by 23 to
 26 cycles on average, about 10 of them by construction. Underestimating brings maintenance forward, which
 is the cheaper error.
 
@@ -97,11 +97,11 @@ is the cheaper error.
 
 The residual distributions (Fig.~\ref{fig:results-residuals}) are centred
 near zero, with mean errors between $-1.0$ and $+0.1$ cycles. The difference
-in score between the two ensembles comes from the costly side: 6 Random
-Forest predictions and 9 XGBoost predictions are more than 20 cycles late.
-Because $S$ grows exponentially with lateness, these few engines account
-for most of the gap between 344 and 389, even though the RMSEs are almost
-equal.
+in score between the two ensembles does not come from late predictions,
+which add almost the same to $S$ (180.2 and 179.5). Most of the gap between
+389 and 344 comes from engine 45 (true RUL 114), predicted at 54 by XGBoost
+and 64 by Random Forest, which adds 96.8 and 47.4 to $S$. Without it
+XGBoost would have the lower score.
 
 \begin{figure}[t]
   \centering

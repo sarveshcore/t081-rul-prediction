@@ -26,7 +26,7 @@ engines with true RUL of at most 50 cycles, the late-stage RMSE is 7.34
 for Random Forest and 7.03 for XGBoost, against 17.88 and 18.11 on the 67
 early-stage engines. Part of the early-stage error is built into the
 target: eleven test engines have a true RUL above the training cap, and
-no model predicts much above 125, so these engines are underestimated by
+no model on engineered features predicts above 130, so these engines are underestimated by
 construction. This error only brings maintenance forward. The costlier
 error appears between 51 and 75 cycles, where all three models predict too
 late (median error $+9$ to $+14$ cycles), around the point at which
@@ -38,9 +38,9 @@ Cross validation selected XGBoost (RMSE 13.99 against 14.42 for Random
 Forest), while Random Forest is marginally better on the test set (RMSE
 15.23 against 15.36, score 344 against 389). We kept the selection made
 before the test set was opened. The bootstrap interval above shows that the
-test ranking of the two ensembles is within sampling noise, and the score
-gap comes from a few engines predicted more than 20 cycles late (6 for
-Random Forest, 9 for XGBoost). Cross validation and test numbers are not
+test ranking of the two ensembles is within sampling noise, and most of the
+score gap comes from a single engine that XGBoost predicts about 9 cycles
+earlier than Random Forest (Section~\ref{sec:results}). Cross validation and test numbers are not
 directly comparable: cross validation scores every cycle against the
 capped target, whereas the test set scores one cycle per engine against
 the true RUL. The cross validation scores of the selected configurations

@@ -189,7 +189,8 @@ more (e^(d/10) vs e^(−d/13)) and exponentially, because a late prediction
 can mean an engine fails in service. Two models with almost the same RMSE
 can differ a lot on S: our RF and XGBoost are 14.02 vs 14.08 in RMSE but
 310 vs 347 in S. Against the true RUL it is the same story (S 344 vs
-389): XGBoost has 9 predictions more than 20 cycles late, RF only 6.
+389), and most of that gap is one engine that XGBoost predicts about 9
+cycles earlier than RF.
 
 **4. What is the best published FD001 result, and where are you?**
 Best RMSE is the 1D CNN of Li et al. (2018), 12.61, then Ragab et al.'s

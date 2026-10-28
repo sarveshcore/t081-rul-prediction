@@ -174,12 +174,16 @@ cancels out and only the model difference is left.
 different things. CV scores every cycle of held-out engines against the
 capped label. The test scores one cycle per engine against the true,
 uncapped label. 11 test engines have true RUL above 125, and a model
-trained on a cap cannot predict above it, so those cost about 25 cycles
+trained on a cap barely predicts above it, so those cost about 25 cycles
 each. Against labels clipped at 125 the test RMSE is 14.08, close to CV.
 
 *Why do the two ensembles differ on the NASA score but not RMSE?* The score
-is exponential in lateness. XGBoost has 9 predictions more than 20 cycles
-late, Random Forest 6. Those few engines drive the score.
+is exponential in the error, so one big miss can outweigh many small ones.
+Here it's one early miss: engine 45 (true RUL 114) is predicted at 54 by
+XGBoost and 64 by Random Forest, which costs 96.8 vs 47.4 points. That is
+more than the whole 44-point gap. The late predictions cost both models
+about the same (180.2 vs 179.5), even though XGBoost has 9 predictions more
+than 20 cycles late and Random Forest 6.
 
 *How do you compare with published work?* Against labels clipped at 125,
 like the papers, using every FD001 row with RMSE and score in Ragab et al.
@@ -187,7 +191,7 @@ like the papers, using every FD001 row with RMSE and score in Ragab et al.
 XGBoost (14.08) come fifth and sixth out of 14. We beat published RF
 (17.91) and gradient boosting (15.67) from Zhang et al. 2017, and six of the
 ten deep models, from CNN-LSTM (14.40) to the 2D CNN (18.45). Four deep
-models beat us by 0.8 to 1.4 cycles: Li et al.'s 1D CNN (12.61), ATS2S
+models beat us by 0.8 to 1.5 cycles: Li et al.'s 1D CNN (12.61), ATS2S
 (12.63), HDNN (13.02) and BLCNN (13.18). On the NASA score we look worse:
 six published models score below our RF's 310, including BiLSTM-ED (273)
 and CNN-LSTM (290), which have worse RMSE than us but fewer badly late

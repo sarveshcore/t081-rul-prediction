@@ -162,8 +162,8 @@ only falls clearly in the last third of life.
 **How good is it?** Correlation with capped RUL is **0.868 ± 0.016 out of
 fold** (fitted on each fold's training engines, measured on its validation
 engines) and 0.864 in sample. They're almost the same, so it doesn't
-overfit. The best single feature, a 20 cycle rolling mean, reaches |r| =
-0.80 (in sample).
+overfit. The best single feature, the 5 cycle rolling mean of s_4, reaches
+|r| = 0.82 (in sample).
 
 ### The limitation of fixed windows (sets up Phase 2)
 Every feature looks back at most 20 cycles, but engines live 128 to 362

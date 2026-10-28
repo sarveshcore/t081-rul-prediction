@@ -107,12 +107,12 @@ direction of greatest variance, which need not be the direction of wear,
 and its sign and scale are arbitrary; the regression picks the sensor
 combination that tracks degradation directly and has a fixed 0 to 1 scale.
 Its limitation is the linear target: real wear is flat for most of a life
-and then accelerates, so the HI starts near 0.8 rather than 1 and only
+and then accelerates, so the HI starts near 0.7 rather than 1 and only
 falls clearly in the last third of life. Fitted on each cross validation
 fold's training engines and evaluated on its validation engines, the HI has
 an out of fold correlation of $0.87 \pm 0.02$ with the capped RUL (0.86 in
 sample, so the fit does not overfit). For comparison, the strongest single
-feature, a 20 cycle rolling mean, reaches $|r| = 0.80$ in sample.
+feature, the 5 cycle rolling mean of s\_4, reaches $|r| = 0.82$ in sample.
 
 Fig.~\ref{fig:features-trends} shows these features for two training
 engines: the 20 cycle rolling mean removes most of the cycle to cycle
