@@ -23,7 +23,7 @@ For training-only analysis, use `rul.data.load_train_fd()`. It reads the same
 training table without opening either test file. The executed EDA notebook is
 `notebooks/01_eda.ipynb`; it records the evidence for the 14 retained sensors
 exported as `rul.data.USEFUL_SENSORS`. Only its final cell opens the test files
-for the descriptive plots approved in PR #19; no training decision is revisited.
+for descriptive plots made after every training decision; no training decision is revisited.
 
 To reproduce these raw files, download the linked archive and extract only
 `train_FD001.txt`, `test_FD001.txt`, and `RUL_FD001.txt` into `data/raw/`.

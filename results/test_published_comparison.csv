@@ -3,7 +3,7 @@ method,source,rmse,nasa_score,where
 ATS2S,Ragab et al. 2020,12.63,243.0,published
 HDNN,Al-Dulaimi et al. 2019,13.02,245.0,published
 BLCNN,Liu et al. 2019,13.18,302.0,published
-Random Forest (ours),engineered features,14.023325572378523,309.5353463971359,this project
+Random Forest (ours),engineered features,14.023325572378523,309.5353463971358,this project
 XGBoost (ours),engineered features,14.080023435298283,346.9564947030902,this project
 CNN-LSTM,Wu et al. 2019,14.4,290.0,published
 BiLSTM-ED,Yu et al. 2019,14.74,273.0,published
