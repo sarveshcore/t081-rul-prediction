@@ -1,11 +1,13 @@
 # ABOUTME: Tests for the shared PyTorch training loop and engine level cross validation.
 # ABOUTME: Covers learning, early stopping, best weight restore, tuple inputs and seeding.
 import numpy as np
+import pandas as pd
 import pytest
 import torch
 from torch import nn
 
-from rul.train import fit_net, predict_net, set_seed
+from rul.sequences import window_prepare
+from rul.train import cv_net, fit_net, predict_net, set_seed
 
 
 class ToyLSTM(nn.Module):
@@ -89,3 +91,54 @@ def test_same_seed_same_predictions():
         fit_net(net, X, y, X, y, epochs=5, batch_size=32)
         predictions.append(predict_net(net, X))
     np.testing.assert_array_equal(*predictions)
+
+
+def engines_frame() -> pd.DataFrame:
+    """Ten engines of 20 to 29 cycles, two noisy sensors linear in RUL, index shuffled."""
+    rng = np.random.default_rng(42)
+    rows = [(u, c) for u in range(1, 11) for c in range(1, 20 + u)]
+    df = pd.DataFrame(rows, columns=["unit", "cycle"])
+    df["rul"] = df.groupby("unit")["cycle"].transform("max") - df["cycle"]
+    df["s_a"] = df["rul"] + rng.normal(size=len(df))
+    df["s_b"] = -0.5 * df["rul"] + rng.normal(size=len(df))
+    return df.sample(frac=1, random_state=42)
+
+
+def spy_prepare(calls: list):
+    """A window prepare function that records which units it fits on and applies to."""
+    inner = window_prepare(["s_a", "s_b"], window=5)
+
+    def prepare(fit_df, apply_df):
+        calls.append((set(fit_df["unit"]), set(apply_df["unit"])))
+        return inner(fit_df, apply_df)
+    return prepare
+
+
+def run_cv(calls: list, n_splits: int = 5) -> pd.DataFrame:
+    return cv_net(lambda: ToyLSTM(n_features=2), engines_frame(), spy_prepare(calls),
+                  n_splits=n_splits, epochs=3, batch_size=64)
+
+
+def test_cv_net_returns_one_row_per_fold():
+    folds = run_cv([])
+    assert list(folds["fold"]) == [0, 1, 2, 3, 4]
+    assert {"rmse", "mae", "nasa_score", "rmse_late", "best_epoch", "n_rows"} <= set(folds)
+    assert np.isfinite(folds[["rmse", "mae"]].to_numpy()).all()
+    assert folds["n_rows"].sum() == len(engines_frame())
+
+
+def test_cv_net_scores_every_unit_once():
+    calls = []
+    run_cv(calls)
+    scored = [applied for _, applied in calls[2::3]]
+    assert sorted(u for units in scored for u in units) == list(range(1, 11))
+
+
+def test_scored_and_early_stopping_engines_never_fit():
+    calls = []
+    run_cv(calls)
+    for fold in range(5):
+        (fit, train), (fit_es, es), (fit_val, val) = calls[3 * fold: 3 * fold + 3]
+        assert fit == train == fit_es == fit_val
+        assert es and not es & fit
+        assert val and not val & fit and not val & es

@@ -2,10 +2,15 @@
 # ABOUTME: Adam on MSE with early stopping, prediction, and engine level cross validation.
 import copy
 import random
+from collections.abc import Callable
 
 import numpy as np
+import pandas as pd
 import torch
 from torch import nn
+
+from rul.evaluate import evaluate
+from rul.split import engine_folds, engine_split
 
 SEED = 42
 
@@ -74,3 +79,25 @@ def predict_net(net: nn.Module, inputs, batch_size: int = 1024) -> np.ndarray:
     with torch.no_grad():
         parts = [net(*(x[i:i + batch_size] for x in X)) for i in range(0, len(X[0]), batch_size)]
     return torch.cat(parts).double().numpy()
+
+
+def cv_net(build_net: Callable[[], nn.Module], df: pd.DataFrame, prepare: Callable, *,
+           n_splits: int = 5, seed: int = SEED, es_frac: float = 0.2, **fit_kwargs) -> pd.DataFrame:
+    """GroupKFold by unit; early stopping uses engines held out of each fold's training engines.
+
+    prepare(fit_df, apply_df) -> (inputs, y) fits any scaler on fit_df only. Every row of each
+    held out fold is scored, so pass df with the target already capped as in Phase 1 CV.
+    """
+    rows = []
+    for fold, (train_idx, val_idx) in enumerate(engine_folds(df, n_splits=n_splits)):
+        inner, es = engine_split(df.iloc[train_idx], val_frac=es_frac, seed=seed)
+        train_inputs, y_train = prepare(inner, inner)
+        es_inputs, y_es = prepare(inner, es)
+        val_inputs, y_val = prepare(inner, df.iloc[val_idx])
+        set_seed(seed)
+        net = build_net()
+        history = fit_net(net, train_inputs, y_train, es_inputs, y_es, seed=seed, **fit_kwargs)
+        metrics = evaluate(y_val, predict_net(net, val_inputs))
+        rows.append({"fold": fold, **metrics, "best_epoch": history["best_epoch"],
+                     "n_rows": len(y_val)})
+    return pd.DataFrame(rows)
