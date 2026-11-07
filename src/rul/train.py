@@ -46,7 +46,7 @@ def _loss(net: nn.Module, inputs: tuple[torch.Tensor, ...], y: torch.Tensor) -> 
 
 
 def fit_net(net: nn.Module, train_inputs, y_train, val_inputs, y_val, *, epochs: int = 100,
-            batch_size: int = 256, lr: float = 1e-3, weight_decay: float = 0.0,
+            batch_size: int = 64, lr: float = 1e-3, weight_decay: float = 0.0,
             patience: int = 10, grad_clip: float | None = 1.0, seed: int = SEED) -> dict:
     """Train with Adam on MSE, stop after patience epochs without improvement, keep best weights.
 

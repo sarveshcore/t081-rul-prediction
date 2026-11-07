@@ -9,7 +9,10 @@ sensors and predict the RUL at the window's final cycle. Windows are built
 separately for each engine, so no window ever contains cycles from two
 engines. We build one window ending at every cycle. This gives the sequence
 models exactly the same training and validation rows as the Phase 1 models,
-so their cross validation errors are directly comparable. The default length
+so their cross validation errors are scored on the same rows and folds. One
+difference remains: the sequence models train on 64 engines per fold, because
+16 of the fold's 80 training engines are held out for early stopping, while
+the Phase 1 models train on all 80. The default length
 is $w = 30$: the shortest FD001 test engine has 31 observed cycles, so every
 test engine is scored on real history, while the shortest training engine
 (128 cycles) is far longer than the window.
@@ -31,7 +34,7 @@ statistic of a scored engine reaches the model.
 
 \subsection{Training and early stopping}
 All sequence models share one training loop: Adam on mean squared error,
-mini batches of 256 windows, gradient norms clipped at 1, and seed 42 for
+mini batches of 64 windows, gradient norms clipped at 1, and seed 42 for
 weights and batch order. Training stops after a fixed number of epochs
 without improvement in validation loss, and the weights from the best epoch
 are restored. Early stopping chooses a hyperparameter, the number of epochs,
