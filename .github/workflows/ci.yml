@@ -16,6 +16,8 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      # The CPU wheel avoids the multi GB CUDA build; the torch pin in pyproject accepts it.
+      - run: pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
       - run: pip install -e ".[dev]"
       - run: ruff check .
       - run: pytest -q
