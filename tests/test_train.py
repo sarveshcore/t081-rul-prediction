@@ -7,6 +7,7 @@ import torch
 from torch import nn
 
 from rul.sequences import window_prepare
+from rul.split import engine_split
 from rul.train import cv_net, fit_net, predict_net, set_seed
 
 
@@ -32,6 +33,29 @@ class SumNet(nn.Module):
 
     def forward(self, a, b):
         return self.scale[0] * a[:, -1, 0] + self.scale[1] * b[:, 0]
+
+
+class ColumnNet(nn.Module):
+    """A head that forgets to squeeze, so it returns shape (n, 1) instead of (n,)."""
+
+    def __init__(self):
+        super().__init__()
+        self.head = nn.Linear(1, 1)
+
+    def forward(self, x):
+        return self.head(x[:, -1])
+
+
+class BatchNormNet(nn.Module):
+    """A net with BatchNorm, which fails in train mode on a batch of one row."""
+
+    def __init__(self):
+        super().__init__()
+        self.norm = nn.BatchNorm1d(1)
+        self.head = nn.Linear(1, 1)
+
+    def forward(self, x):
+        return self.head(self.norm(x[:, -1])).squeeze(-1)
 
 
 def toy_data(n: int = 256, seed: int = 0):
@@ -93,6 +117,25 @@ def test_same_seed_same_predictions():
     np.testing.assert_array_equal(*predictions)
 
 
+def test_fit_net_rejects_column_output():
+    X, y = toy_data()
+    with pytest.raises(ValueError, match="one value per row"):
+        fit_net(ColumnNet(), X, y, X, y, epochs=1)
+
+
+def test_predict_net_rejects_column_output():
+    X, _ = toy_data()
+    with pytest.raises(ValueError, match="one value per row"):
+        predict_net(ColumnNet(), X)
+
+
+def test_one_row_last_batch_is_skipped():
+    X, y = toy_data(n=65)
+    set_seed(42)
+    history = fit_net(BatchNormNet(), X, y, X, y, epochs=2, batch_size=64)
+    assert len(history["train_loss"]) == 2
+
+
 def engines_frame() -> pd.DataFrame:
     """Ten engines of 20 to 29 cycles, two noisy sensors linear in RUL, index shuffled."""
     rng = np.random.default_rng(42)
@@ -127,10 +170,21 @@ def test_cv_net_returns_one_row_per_fold():
     assert folds["n_rows"].sum() == len(engines_frame())
 
 
-def test_cv_net_scores_every_unit_once():
+def test_cv_net_scores_every_unit_once(monkeypatch):
     calls = []
+
+    def recording_split(df, **kwargs):
+        inner, es = engine_split(df, **kwargs)
+        calls.append(("early stopping", set(es["unit"])))
+        return inner, es
+    monkeypatch.setattr("rul.train.engine_split", recording_split)
     run_cv(calls)
-    scored = [applied for _, applied in calls[2::3]]
+    scored, es = [], None
+    for fit, applied in calls:
+        if fit == "early stopping":
+            es = applied
+        elif applied not in (fit, es):
+            scored.append(applied)
     assert sorted(u for units in scored for u in units) == list(range(1, 11))
 
 

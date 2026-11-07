@@ -29,17 +29,30 @@ def _tensors(inputs) -> tuple[torch.Tensor, ...]:
     return tuple(torch.as_tensor(np.asarray(a), dtype=torch.float32) for a in arrays)
 
 
+def _forward(net: nn.Module, inputs) -> torch.Tensor:
+    """Run the net and insist on one prediction per row, so an (n, 1) head cannot broadcast."""
+    out = net(*inputs)
+    if out.shape != (len(inputs[0]),):
+        raise ValueError(f"the net must return one value per row, shape ({len(inputs[0])},), "
+                         f"but returned {tuple(out.shape)}; end forward with .squeeze(-1)")
+    return out
+
+
 def _loss(net: nn.Module, inputs: tuple[torch.Tensor, ...], y: torch.Tensor) -> float:
     """Mean squared error of the net on all of inputs, without tracking gradients."""
     net.eval()
     with torch.no_grad():
-        return float(nn.functional.mse_loss(net(*inputs), y))
+        return float(nn.functional.mse_loss(_forward(net, inputs), y))
 
 
 def fit_net(net: nn.Module, train_inputs, y_train, val_inputs, y_val, *, epochs: int = 100,
             batch_size: int = 256, lr: float = 1e-3, weight_decay: float = 0.0,
             patience: int = 10, grad_clip: float | None = 1.0, seed: int = SEED) -> dict:
-    """Train with Adam on MSE, stop after patience epochs without improvement, keep best weights."""
+    """Train with Adam on MSE, stop after patience epochs without improvement, keep best weights.
+
+    The net must return one value per row, shape (n,). A one row final batch is skipped,
+    because BatchNorm cannot normalise a single row in train mode.
+    """
     X, Xv = _tensors(train_inputs), _tensors(val_inputs)
     y = torch.as_tensor(np.asarray(y_train), dtype=torch.float32)
     yv = torch.as_tensor(np.asarray(y_val), dtype=torch.float32)
@@ -52,8 +65,10 @@ def fit_net(net: nn.Module, train_inputs, y_train, val_inputs, y_val, *, epochs:
         net.train()
         batch_losses = []
         for idx in torch.randperm(len(y), generator=generator).split(batch_size):
+            if len(idx) == 1:
+                continue
             optimizer.zero_grad()
-            loss = nn.functional.mse_loss(net(*(x[idx] for x in X)), y[idx])
+            loss = nn.functional.mse_loss(_forward(net, tuple(x[idx] for x in X)), y[idx])
             loss.backward()
             if grad_clip is not None:
                 nn.utils.clip_grad_norm_(net.parameters(), grad_clip)
@@ -73,11 +88,12 @@ def fit_net(net: nn.Module, train_inputs, y_train, val_inputs, y_val, *, epochs:
 
 
 def predict_net(net: nn.Module, inputs, batch_size: int = 1024) -> np.ndarray:
-    """Predict in evaluation mode, in batches, returning a flat float64 array."""
+    """Predict in evaluation mode, in batches, returning a flat float64 array of shape (n,)."""
     X = _tensors(inputs)
     net.eval()
     with torch.no_grad():
-        parts = [net(*(x[i:i + batch_size] for x in X)) for i in range(0, len(X[0]), batch_size)]
+        parts = [_forward(net, tuple(x[i:i + batch_size] for x in X))
+                 for i in range(0, len(X[0]), batch_size)]
     return torch.cat(parts).double().numpy()
 
 
