@@ -8,8 +8,7 @@ The sequence models read a window of the last $w$ cycles of the 14 useful
 sensors and predict the RUL at the window's final cycle. Windows are built
 separately for each engine, so no window ever contains cycles from two
 engines. We build one window ending at every cycle. This gives the sequence
-models exactly the same training and validation rows as the Phase 1 models,
-so their cross validation errors are scored on the same rows and folds. One
+models the same scored rows and folds as the Phase 1 models. One
 difference remains: the sequence models train on 64 engines per fold, because
 16 of the fold's 80 training engines are held out for early stopping, while
 the Phase 1 models train on all 80. The default length
@@ -34,8 +33,10 @@ statistic of a scored engine reaches the model.
 
 \subsection{Training and early stopping}
 All sequence models share one training loop: Adam on mean squared error,
-mini batches of 64 windows, gradient norms clipped at 1, and seed 42 for
-weights and batch order. Training stops after a fixed number of epochs
+mini batches of 256 windows, gradient norms clipped at 1, and seed 42 for
+weights and batch order. The loop multiplies every network output by 125,
+the RUL cap, so a freshly initialised network, whose outputs start near
+zero, only has to learn values near 1 instead of values up to 125. Training stops after a fixed number of epochs
 without improvement in validation loss, and the weights from the best epoch
 are restored. Early stopping chooses a hyperparameter, the number of epochs,
 by looking at validation error. If it watched the same engines that are

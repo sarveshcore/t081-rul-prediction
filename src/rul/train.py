@@ -29,29 +29,37 @@ def _tensors(inputs) -> tuple[torch.Tensor, ...]:
     return tuple(torch.as_tensor(np.asarray(a), dtype=torch.float32) for a in arrays)
 
 
-def _forward(net: nn.Module, inputs) -> torch.Tensor:
-    """Run the net and insist on one prediction per row, so an (n, 1) head cannot broadcast."""
+def _forward(net: nn.Module, inputs, y_scale: float) -> torch.Tensor:
+    """Run the net, insist on one prediction per row, and multiply by y_scale.
+
+    The shape check stops an (n, 1) head from broadcasting. y_scale lets the net output
+    values near 1 instead of having to grow its weights until it reaches RUL values near 125.
+    """
     out = net(*inputs)
     if out.shape != (len(inputs[0]),):
         raise ValueError(f"the net must return one value per row, shape ({len(inputs[0])},), "
                          f"but returned {tuple(out.shape)}; end forward with .squeeze(-1)")
-    return out
+    return out * y_scale
 
 
-def _loss(net: nn.Module, inputs: tuple[torch.Tensor, ...], y: torch.Tensor) -> float:
+def _loss(net: nn.Module, inputs: tuple[torch.Tensor, ...], y: torch.Tensor,
+          y_scale: float) -> float:
     """Mean squared error of the net on all of inputs, without tracking gradients."""
     net.eval()
     with torch.no_grad():
-        return float(nn.functional.mse_loss(_forward(net, inputs), y))
+        return float(nn.functional.mse_loss(_forward(net, inputs, y_scale), y))
 
 
 def fit_net(net: nn.Module, train_inputs, y_train, val_inputs, y_val, *, epochs: int = 100,
-            batch_size: int = 64, lr: float = 1e-3, weight_decay: float = 0.0,
-            patience: int = 10, grad_clip: float | None = 1.0, seed: int = SEED) -> dict:
+            batch_size: int = 256, lr: float = 1e-3, weight_decay: float = 0.0,
+            patience: int = 10, grad_clip: float | None = 1.0, seed: int = SEED,
+            y_scale: float = 125.0) -> dict:
     """Train with Adam on MSE, stop after patience epochs without improvement, keep best weights.
 
-    The net must return one value per row, shape (n,). A one row final batch is skipped,
-    because BatchNorm cannot normalise a single row in train mode.
+    The net must return one value per row, shape (n,). Its output is multiplied by y_scale,
+    125 by default to match the RUL cap, so predict with the same y_scale. Losses are in
+    the units of y. A one row final batch is skipped, because BatchNorm cannot normalise
+    a single row in train mode.
     """
     X, Xv = _tensors(train_inputs), _tensors(val_inputs)
     y = torch.as_tensor(np.asarray(y_train), dtype=torch.float32)
@@ -68,13 +76,13 @@ def fit_net(net: nn.Module, train_inputs, y_train, val_inputs, y_val, *, epochs:
             if len(idx) == 1:
                 continue
             optimizer.zero_grad()
-            loss = nn.functional.mse_loss(_forward(net, tuple(x[idx] for x in X)), y[idx])
+            loss = nn.functional.mse_loss(_forward(net, tuple(x[idx] for x in X), y_scale), y[idx])
             loss.backward()
             if grad_clip is not None:
                 nn.utils.clip_grad_norm_(net.parameters(), grad_clip)
             optimizer.step()
             batch_losses.append(loss.item())
-        val_loss = _loss(net, Xv, yv)
+        val_loss = _loss(net, Xv, yv, y_scale)
         history["train_loss"].append(float(np.mean(batch_losses)))
         history["val_loss"].append(val_loss)
         if val_loss < best_loss:
@@ -87,18 +95,23 @@ def fit_net(net: nn.Module, train_inputs, y_train, val_inputs, y_val, *, epochs:
     return history
 
 
-def predict_net(net: nn.Module, inputs, batch_size: int = 1024) -> np.ndarray:
-    """Predict in evaluation mode, in batches, returning a flat float64 array of shape (n,)."""
+def predict_net(net: nn.Module, inputs, batch_size: int = 1024,
+                y_scale: float = 125.0) -> np.ndarray:
+    """Predict in evaluation mode, in batches, returning a flat float64 array of shape (n,).
+
+    Use the same y_scale the net was trained with in fit_net.
+    """
     X = _tensors(inputs)
     net.eval()
     with torch.no_grad():
-        parts = [_forward(net, tuple(x[i:i + batch_size] for x in X))
+        parts = [_forward(net, tuple(x[i:i + batch_size] for x in X), y_scale)
                  for i in range(0, len(X[0]), batch_size)]
     return torch.cat(parts).double().numpy()
 
 
 def cv_net(build_net: Callable[[], nn.Module], df: pd.DataFrame, prepare: Callable, *,
-           n_splits: int = 5, seed: int = SEED, es_frac: float = 0.2, **fit_kwargs) -> pd.DataFrame:
+           n_splits: int = 5, seed: int = SEED, es_frac: float = 0.2, y_scale: float = 125.0,
+           **fit_kwargs) -> pd.DataFrame:
     """GroupKFold by unit; early stopping uses engines held out of each fold's training engines.
 
     prepare(fit_df, apply_df) -> (inputs, y) fits any scaler on fit_df only. Every row of each
@@ -112,8 +125,9 @@ def cv_net(build_net: Callable[[], nn.Module], df: pd.DataFrame, prepare: Callab
         val_inputs, y_val = prepare(inner, df.iloc[val_idx])
         set_seed(seed)
         net = build_net()
-        history = fit_net(net, train_inputs, y_train, es_inputs, y_es, seed=seed, **fit_kwargs)
-        metrics = evaluate(y_val, predict_net(net, val_inputs))
+        history = fit_net(net, train_inputs, y_train, es_inputs, y_es, seed=seed,
+                          y_scale=y_scale, **fit_kwargs)
+        metrics = evaluate(y_val, predict_net(net, val_inputs, y_scale=y_scale))
         rows.append({"fold": fold, **metrics, "best_epoch": history["best_epoch"],
                      "n_rows": len(y_val)})
     return pd.DataFrame(rows)

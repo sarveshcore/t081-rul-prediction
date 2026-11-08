@@ -35,6 +35,17 @@ class SumNet(nn.Module):
         return self.scale[0] * a[:, -1, 0] + self.scale[1] * b[:, 0]
 
 
+class OnesNet(nn.Module):
+    """A net that always outputs 1, for checking how the loop scales outputs."""
+
+    def __init__(self):
+        super().__init__()
+        self.bias = nn.Parameter(torch.ones(1))
+
+    def forward(self, x):
+        return self.bias * torch.ones(len(x))
+
+
 class ColumnNet(nn.Module):
     """A head that forgets to squeeze, so it returns shape (n, 1) instead of (n,)."""
 
@@ -100,8 +111,8 @@ def test_tuple_inputs():
     y = X[:, -1, 0] + 2 * b[:, 0]
     set_seed(42)
     net = SumNet()
-    fit_net(net, (X, b), y, (X, b), y, epochs=200, lr=5e-2, batch_size=64)
-    prediction = predict_net(net, (X, b))
+    fit_net(net, (X, b), y, (X, b), y, epochs=200, lr=5e-2, batch_size=64, y_scale=1.0)
+    prediction = predict_net(net, (X, b), y_scale=1.0)
     assert prediction.shape == (len(X),)
     assert mse(prediction, y) < 1e-2
 
@@ -115,6 +126,19 @@ def test_same_seed_same_predictions():
         fit_net(net, X, y, X, y, epochs=5, batch_size=32)
         predictions.append(predict_net(net, X))
     np.testing.assert_array_equal(*predictions)
+
+
+def test_predict_net_scales_output_to_rul():
+    X, _ = toy_data(n=4)
+    np.testing.assert_array_equal(predict_net(OnesNet(), X), [125.0] * 4)
+    np.testing.assert_array_equal(predict_net(OnesNet(), X, y_scale=2.0), [2.0] * 4)
+
+
+def test_fit_net_trains_on_scaled_output():
+    X, _ = toy_data(n=8)
+    y = np.full(len(X), 125.0, dtype=np.float32)
+    history = fit_net(OnesNet(), X, y, X, y, epochs=1, lr=0.0)
+    assert history["val_loss"] == [0.0]
 
 
 def test_fit_net_rejects_column_output():
