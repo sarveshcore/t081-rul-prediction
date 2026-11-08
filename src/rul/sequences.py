@@ -35,7 +35,13 @@ def make_windows(df: pd.DataFrame, sensors: list[str], window: int = 30, scaler=
 
 def last_windows(df: pd.DataFrame, sensors: list[str], window: int = 30,
                  scaler=None) -> tuple[np.ndarray, pd.Index]:
-    """One window per unit ending at its last cycle, sorted by unit to match test RUL."""
+    """One window per unit ending at its last cycle, sorted by unit to match test RUL.
+
+    scaler must be the one fitted on the training engines, so test engines never fit it.
+    """
+    if scaler is None:
+        raise ValueError("last_windows needs the scaler fitted on the training engines, "
+                         "for example the one make_windows returns")
     df, _ = _scaled(df, sensors, scaler)
     groups = df.groupby("unit", sort=True)
     X = np.stack([_engine_windows(g[sensors].to_numpy(), window)[-1] for _, g in groups])

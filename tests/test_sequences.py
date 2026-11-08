@@ -2,6 +2,7 @@
 # ABOUTME: Also checks scaler reuse, last windows per unit and the CV prepare function.
 import numpy as np
 import pandas as pd
+import pytest
 
 from rul.sequences import last_windows, make_windows, window_prepare
 
@@ -74,6 +75,11 @@ def test_last_windows_one_per_unit_sorted():
     assert X.shape == (2, 4, 2)
     np.testing.assert_array_equal(np.rint(raw(X, scaler)[:, -1, 0]), [105, 203])
     np.testing.assert_array_equal(np.rint(raw(X, scaler)[1, :, 0]), [201, 201, 202, 203])
+
+
+def test_last_windows_refuses_to_fit_its_own_scaler():
+    with pytest.raises(ValueError, match="training engines"):
+        last_windows(toy_frame(), SENSORS, 4)
 
 
 def test_window_prepare_fits_on_fit_df_only():
