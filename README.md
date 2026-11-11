@@ -34,7 +34,7 @@ XGBoost (347). See `report/sections/results.tex`.
 
 ## Reproduce
 
-Needs Python 3.12 or newer.
+Needs Python 3.12 to 3.14. PyTorch 2.14.1 has no wheels for 3.15 yet.
 
 ```sh
 python -m venv .venv && source .venv/bin/activate
