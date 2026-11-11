@@ -366,3 +366,134 @@ value for `cycle` means the model uses age, not that age causes failure.
 - The Random Forest numbers in the feature ablation (Aryan, #4) use
   default settings, so they differ slightly from my tuned forest (14.74 vs
   14.42 on all features).
+
+## Phase 2: sequence models
+
+Code: `src/rul/nets.py`, `notebooks/06_sequence_models.ipynb`,
+`tests/test_nets.py`. Results: `results/dl_cv.csv`,
+`results/dl_search.csv`, `results/dl_best_params.json`, figure
+`figures/dl_learning_curves.png`. Report:
+`report/sections/dl_models.tex`. The windows and the training loop are
+Sarvesh's (`src/rul/sequences.py`, `src/rul/train.py`).
+
+### My part in plain words
+
+Three networks read the last 30 cycles of the 14 sensors and predict RUL
+(capped at 125). No cycle number, no engineered features. Each is tuned on
+the same 5 engine folds as Phase 1: 8 configs sampled from a grid of 16,
+pick the lowest mean RMSE.
+
+| Model | Inputs | Params | CV RMSE | Late RMSE (RUL ≤ 50) |
+|---|---|---|---|---|
+| **Transformer** | windows | 51,009 | **13.28 ± 0.34** | **7.98** |
+| LSTM | windows | 6,177 | 14.02 ± 0.43 | 8.84 |
+| TCN | windows | 90,241 | 15.91 ± 1.01 | 11.54 |
+| XGBoost | engineered | – | 13.99 ± 0.46 | 9.88 |
+| XGBoost | raw | – | 16.42 ± 0.87 | 15.23 |
+
+Selected: LSTM 1 layer, hidden 32, dropout 0.3, lr 0.003. TCN 4 blocks,
+64 channels, dropout 0.1, lr 0.003. Transformer 1 layer, d = 64,
+4 heads, dropout 0.1, lr 0.001.
+
+The fair Phase 1 comparison is raw features (16.42), because the nets get
+no engineered features either. All three beat it, so the 30 cycle history
+holds information one cycle doesn't. The 0.71 lead of the Transformer over
+XGBoost is on the selection folds, so the test set (#38) decides.
+
+### LSTM cell
+
+For each cycle t, with `[h, x]` meaning the old hidden state and the new
+reading stuck together:
+
+- forget gate `f = σ(W_f [h, x] + b_f)`: how much of the old cell to keep
+- input gate `i = σ(W_i [h, x] + b_i)`: how much new info to write
+- candidate `g = tanh(W_g [h, x] + b_g)`: the new info itself
+- output gate `o = σ(W_o [h, x] + b_o)`: how much of the cell to show
+- cell `c = f ⊙ c_old + i ⊙ g`, hidden `h = o ⊙ tanh(c)`
+
+The cell is updated by adding, not multiplying through a squashing function
+every step, so the gradient survives across many cycles (no vanishing).
+I use the hidden state after the last cycle.
+
+Parameter count of one layer in PyTorch: `4 × (hidden × (inputs + hidden) +
+2 × hidden)`. Selected LSTM: `4 × (32 × 46 + 64) = 6,144`, plus the head
+(32 + 1) = 6,177.
+
+### TCN receptive field
+
+Two causal convs per block, kernel k = 3, dilation 1, 2, 4, 8 by block.
+Each conv adds `(k − 1) × dilation` cycles of view. Total:
+`R = 1 + 2(k − 1)(2^L − 1)`.
+
+- 3 blocks: 1 + 2·2·7 = 29 cycles
+- 4 blocks: 1 + 2·2·15 = 61 cycles (more than the 30 in the window, so it
+  sees all of it; the rest is padding)
+
+Causal means left padding only: the output at cycle t never uses a later
+cycle. `tests/test_nets.py` checks both: a change at the last cycle leaves
+earlier outputs alone, and a change one cycle outside R doesn't move the
+output.
+
+Why my convolution looks odd: PyTorch's CPU dilated convolution loops one
+sample at a time on this Mac and made the TCN about five times slower than
+the LSTM. So
+`causal_conv` does the same maths as k shifted slices and one matrix
+product. A test checks it equals `Conv1d` with left padding.
+
+### Why the Transformer needs positional encoding
+
+Attention compares every cycle with every other cycle, and the order of
+the inputs doesn't enter that calculation. I also average the outputs. So
+without positions, a window and the same window shuffled give the same
+prediction, and the model can't tell a rising sensor from a falling one.
+Sinusoidal codes (sin and cos at different frequencies) give every cycle a
+distinct pattern. The test reverses a window and checks the output changes.
+
+### What each regulariser does
+
+- **Dropout:** zero a random share of activations each step, so the net
+  can't depend on any one unit. Off at prediction time.
+- **Weight decay 1e-4:** adds 1e-4 × weight to each gradient (L2 penalty),
+  keeps weights small.
+- **Gradient clipping at norm 1:** caps the size of each gradient, so one
+  weird batch with a huge gradient (LSTMs can produce these) can't wreck
+  Adam's running averages. It's for stability, not capacity.
+- **Early stopping, patience 10:** stop when the loss on held-out engines
+  hasn't improved for 10 epochs, then restore the best weights. Those
+  engines are inside the fold's training engines, not the scored ones.
+
+### What the learning curves show
+
+First fold, selected configs. LSTM and Transformer: early stopping loss
+stops improving at epoch 11 and 10 and then just wobbles, while training
+loss keeps falling slowly. They plateau, no sustained rise. TCN: after
+epoch 7, training loss falls from 154 to 68 while early stopping loss rises
+from 193 to 210–355. That's overfitting, and early stopping limits it by
+restoring epoch 7. Every best epoch in the search is at or before 35, so
+with patience 10 every run stops by epoch 45 of 100.
+
+Why is the training loss above the early stopping loss at first? Probably
+because it's the mean over the epoch while the weights are still moving fast, and dropout is
+on. The early stopping loss is measured after the epoch with dropout off.
+
+### Likely questions
+
+**Why is the TCN the worst?** I don't fully know. The selected TCN has 4
+blocks, so it already sees the whole window. On fold one its early stopping
+loss turns up soonest (epoch 7, against 11 and 10). The 3 block TCNs are
+worse still: they see 29 of 30 cycles, but the 4th block also adds depth
+and parameters, so I can't say which of the two helped.
+
+**Why does the LSTM with 6k parameters nearly match XGBoost?** My best
+guess, not something I tested: the window already holds the trend that the engineered features had to compute by hand
+(rolling means, slopes). One small layer is enough to read it off.
+
+**Why one layer beats two?** It's narrow: 14.71 for the worst one layer
+config against 14.77 for the better two layer one, and only two 2 layer
+configs were sampled. If it's real, likely data size: only 64 training engines
+per fold, and a second layer adds a lot of parameters for that. I didn't
+test this beyond the search itself.
+
+**Is the Transformer really better than XGBoost?** On CV, by 0.71 with
+fold std 0.34 and 0.46. Both are the best of 8 configs on the same folds.
+Wait for the test set.
