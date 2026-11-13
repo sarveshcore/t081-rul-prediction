@@ -1,0 +1,4 @@
+model,params,n_params,rmse_mean,mae_mean,nasa_score_mean,rmse_late_mean,rmse_std,mae_std,best_epoch_mean,best_epoch_max,features
+lstm,"{""dropout"": 0.3, ""hidden"": 32, ""layers"": 1, ""lr"": 0.003}",6177,14.017343850776333,10.00088741445622,15539.270403765386,8.836134640594235,0.4269875327803605,0.4592851629899367,12.6,15,30-cycle sensor windows
+tcn,"{""channels"": 64, ""dropout"": 0.1, ""layers"": 4, ""lr"": 0.003}",90241,15.909869298591971,11.973567612227175,21691.22269632393,11.535891620332027,1.0111393372904836,1.0205735578116757,7.2,12,30-cycle sensor windows
+transformer,"{""d_model"": 64, ""dropout"": 0.1, ""layers"": 1, ""lr"": 0.001}",51009,13.276204389214978,9.535555152227863,13687.567015317847,7.9755824389146515,0.33563838436622545,0.34897398858125545,13.8,16,30-cycle sensor windows
