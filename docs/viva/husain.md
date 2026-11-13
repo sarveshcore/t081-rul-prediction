@@ -496,4 +496,9 @@ test this beyond the search itself.
 
 **Is the Transformer really better than XGBoost?** On CV, by 0.71 with
 fold std 0.34 and 0.46. Both are the best of 8 configs on the same folds.
-Wait for the test set.
+It's also not exactly like for like: the nets train on 64 engines per fold
+(16 held out for early stopping), XGBoost on all 80. Wait for the test set.
+
+**Why does `net(x)` give numbers near 1?** The nets output RUL / 125.
+`fit_net` and `predict_net` multiply by 125 (`y_scale`). Call the net
+directly and you have to multiply yourself.

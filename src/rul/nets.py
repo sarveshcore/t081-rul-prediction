@@ -1,6 +1,7 @@
 # ABOUTME: Phase 2 sequence networks: LSTM, temporal CNN and Transformer encoder.
-# ABOUTME: Each maps a (batch, window, sensors) tensor to one RUL value per window, shape (batch,).
+# ABOUTME: Each maps (batch, window, sensors) to RUL / 125 per window, shape (batch,); train.py rescales.
 import math
+from functools import lru_cache
 from typing import Literal
 
 import torch
@@ -21,12 +22,13 @@ class LSTMNet(nn.Module):
         self.head = nn.Linear(hidden, 1)
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
-        """Window summary before the head, shape (batch, out_dim)."""
+        """Hidden state after the last cycle, shape (batch, out_dim)."""
         out, _ = self.lstm(x)
-        return self.drop(out[:, -1])
+        return out[:, -1]
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.head(self.encode(x)).squeeze(-1)
+        # Dropout sits here rather than in encode, so all three encode() outputs are undropped.
+        return self.head(self.drop(self.encode(x))).squeeze(-1)
 
 
 def causal_conv(x: torch.Tensor, conv: nn.Conv1d) -> torch.Tensor:
@@ -86,8 +88,12 @@ def receptive_field(kernel: int, layers: int) -> int:
     return 1 + 2 * (kernel - 1) * (2**layers - 1)
 
 
+@lru_cache(maxsize=32)
 def positional_encoding(length: int, d_model: int) -> torch.Tensor:
-    """Sinusoidal position codes of shape (length, d_model), as in Vaswani et al. (2017)."""
+    """Sinusoidal position codes of shape (length, d_model), as in Vaswani et al. (2017).
+
+    Cached per (length, d_model), so treat the returned tensor as read only.
+    """
     position = torch.arange(length, dtype=torch.float32).unsqueeze(1)
     freq = torch.exp(torch.arange(0, d_model, 2, dtype=torch.float32) * (-math.log(10000.0) / d_model))
     pe = torch.zeros(length, d_model)
@@ -112,8 +118,8 @@ class TransformerNet(nn.Module):
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         """Encoder output averaged over cycles, shape (batch, out_dim)."""
-        # Codes are built per call, so any window length works without a maximum.
-        h = self.embed(x) + positional_encoding(x.shape[1], self.out_dim).to(x.device)
+        # Codes are cached per window length, so any length works without a fixed maximum.
+        h = self.embed(x) + positional_encoding(x.shape[1], self.out_dim).to(x)
         return self.encoder(self.drop(h)).mean(dim=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -124,10 +130,12 @@ NETS = {"lstm": LSTMNet, "tcn": TCNNet, "transformer": TransformerNet}
 
 
 def build_net(name: Literal["lstm", "tcn", "transformer"], n_features: int, **params) -> nn.Module:
-    """Build a sequence network that returns one RUL value per window, shape (batch,).
+    """Build a sequence network that returns one value per window, shape (batch,).
 
-    Every net also has encode(x), its window summary of shape (batch, net.out_dim)
-    before the linear head, for models that add their own head.
+    The output is RUL divided by 125, not cycles: fit_net and predict_net multiply it by
+    y_scale=125. Calling net(x) directly gives values near 1, so multiply by 125 yourself.
+    Every net also has encode(x), its window summary of shape (batch, net.out_dim) before
+    the head and without dropout, for models that add their own head.
     """
     if name not in NETS:
         raise ValueError(f"unknown net {name!r}; choose lstm, tcn, or transformer")

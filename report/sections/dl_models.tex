@@ -108,7 +108,12 @@ Transformer & $d$ & 32, 64 (64) \\
 \subsection{Cross validation results}
 Table~\ref{tab:dl-cv} puts the selected networks next to the Phase 1
 models. Every row uses the same folds, the same scored cycles and RUL
-capped at 125. The Transformer has the lowest error of any model in either
+capped at 125, but the training data differ: the networks train on 64 of
+each fold's 80 training engines, because the other 16 are held out for
+early stopping, while the Phase 1 models train on all 80. The networks
+therefore learn from a fifth fewer engines but use those 16 to choose when
+to stop, so the comparison is close but not exactly like for like. The
+Transformer has the lowest error of any model in either
 phase, 13.28 against 13.99 for XGBoost on engineered features. The LSTM
 reaches 14.02 with 6{,}177 parameters, the fewest of the three networks.
 The TCN is the weakest network at 15.91.
@@ -117,7 +122,8 @@ The TCN is the weakest network at 15.91.
 \centering
 \caption{Five fold engine cross validation, RUL capped at 125. Late RMSE
 covers cycles with true RUL $\le 50$. Phase 1 rows are from
-Table~\ref{tab:cv-results}.}
+Table~\ref{tab:cv-results}; those models train on 80 engines per fold,
+the networks on 64.}
 \label{tab:dl-cv}
 \footnotesize
 \setlength{\tabcolsep}{3pt}

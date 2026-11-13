@@ -20,12 +20,16 @@ def test_one_value_per_window_for_any_length(name, window):
     assert torch.isfinite(out).all()
 
 
-@pytest.mark.parametrize("name", ["lstm", "tcn", "transformer"])
-def test_parameter_counts_are_positive_and_printed(name, capsys):
-    n = count_params(build_net(name, N_FEATURES))
+@pytest.mark.parametrize("name,params,expected", [
+    ("lstm", {"hidden": 32, "layers": 1, "dropout": 0.3}, 6_177),
+    ("tcn", {"channels": 64, "layers": 4, "dropout": 0.1}, 90_241),
+    ("transformer", {"d_model": 64, "layers": 1, "dropout": 0.1}, 51_009),
+])
+def test_parameter_counts_of_the_selected_configs(name, params, expected):
+    """The counts quoted in the report tables and results/dl_best_params.json."""
+    n = count_params(build_net(name, N_FEATURES, **params))
     print(f"{name}: {n} parameters")
-    assert n > 0
-    assert f"{name}: {n}" in capsys.readouterr().out
+    assert n == expected
 
 
 @pytest.mark.parametrize("name", ["lstm", "tcn", "transformer"])
@@ -79,6 +83,11 @@ def test_tcn_is_causal():
     early = net.blocks(x.transpose(1, 2))[:, :, :-1]
     early_changed = net.blocks(changed.transpose(1, 2))[:, :, :-1]
     assert torch.allclose(early, early_changed)
+
+
+def test_transformer_follows_input_dtype():
+    net = build_net("transformer", N_FEATURES).double().eval()
+    assert net(torch.randn(2, 30, N_FEATURES, dtype=torch.float64)).dtype == torch.float64
 
 
 def test_positional_encoding_handles_odd_width():
