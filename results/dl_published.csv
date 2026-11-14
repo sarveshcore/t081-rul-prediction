@@ -1,0 +1,14 @@
+method,source,bib_key,family,window,rul_cap,test_labels_capped,rmse,nasa_score,values_from
+2D CNN,Babu et al. 2016,babu2016cnn,CNN,15,,,18.45,1287,ragab2020attention Table III
+Deep LSTM,Zheng et al. 2017,zheng2017lstm,RNN,,130,,16.14,338,ragab2020attention Table III; cap from wang2019fda
+MODBNE,Zhang et al. 2017,zhang2017modbne,DBN ensemble,,,,15.04,334,ragab2020attention Table III
+LSTMBS,Liao et al. 2018,ragab2020attention,RNN,,,,14.89,481,ragab2020attention Table III
+1D CNN,Li et al. 2018,li2018dcnn,CNN,30,125,,12.61,274,ragab2020attention Table III
+BiLSTM-ED,Yu et al. 2019,ragab2020attention,RNN,,,,14.74,273,ragab2020attention Table III
+CNN-LSTM,Wu et al. 2019,ragab2020attention,CNN and RNN,,,,14.40,290,ragab2020attention Table III
+BLCNN,Liu et al. 2019,ragab2020attention,CNN and RNN,,,,13.18,302,ragab2020attention Table III
+HDNN,Al-Dulaimi et al. 2019,ragab2020attention,CNN and RNN,,,,13.02,245,ragab2020attention Table III
+ATS2S,Ragab et al. 2020,ragab2020attention,attention,30,125,,12.63,243,ragab2020attention Table III
+LSTM attention + handcrafted,Chen et al. 2021,chen2021attention,hybrid,30,,not stated,14.53,322.44,zhang2022dast Tables III and IV
+GCU-Transformer,Mo et al. 2021,mo2021gcu,Transformer,,,,11.27,,later comparisons; check against mo2021gcu
+DAST,Zhang et al. 2022,zhang2022dast,Transformer,40,125,not stated,11.43,203.15,zhang2022dast Tables III and IV

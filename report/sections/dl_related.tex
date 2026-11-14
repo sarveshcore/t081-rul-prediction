@@ -1,0 +1,172 @@
+% ABOUTME: Deep learning related work section of the IEEE report (Phase 2).
+% ABOUTME: LSTM, TCN and Transformer, published FD001 deep results, protocol differences and design sources.
+\section{Deep Learning Related Work}
+\label{sec:dl-related}
+
+Section~\ref{sec:related} placed our Phase 1 models among published FD001
+results. Phase 2 trains networks that learn from raw sensor windows, so this
+section reviews the three architectures we use, the deep models published on
+C-MAPSS, what each architecture assumes about degradation data, and where
+published numbers are scored differently from ours.
+
+\subsection{Architectures}
+\textbf{Recurrent networks and the LSTM.} A recurrent network updates a
+hidden state once per cycle. Training it by backpropagation through time
+multiplies the gradient by the recurrent weights once for every step it
+travels back, so over long sequences the gradient shrinks towards zero or
+grows without bound, and the network cannot learn dependencies more than a
+few steps apart. Hochreiter and Schmidhuber~\cite{hochreiter1997lstm} fixed
+this with a memory cell whose state is carried forward by addition rather
+than by repeated multiplication. Multiplicative gates decide what is written
+to the cell and what is read from it, and the forget gate added by Gers et
+al.~\cite{gers2000forget} decides what is kept. While the forget gate stays
+open, the error flowing back through the cell is passed on unchanged, so a
+reading many cycles back can still affect the weights.
+
+\textbf{Temporal convolutional networks.} Bai et al.~\cite{bai2018tcn}
+proposed a generic convolutional architecture for sequences, the temporal
+convolutional network (TCN). Its convolutions are causal: the output at
+cycle $t$ uses only cycles up to $t$. They are also dilated: with dilation
+$d$ and kernel size $k$, a filter at cycle $t$ reads cycles $t, t-d, \dots,
+t-(k-1)d$, skipping the ones in between. Doubling $d$ from one residual block
+to the next makes the receptive field grow exponentially with depth while
+the number of weights grows only linearly. Across a range of sequence
+modelling tasks, a generic TCN outperformed canonical LSTM and GRU networks
+and kept a longer effective memory~\cite{bai2018tcn}.
+
+\textbf{Transformers.} The Transformer of Vaswani et
+al.~\cite{vaswani2017attention} replaces recurrence with self-attention.
+Every position forms a query, a key and a value; its output is an average of
+all values, weighted by how well its query matches each key. Any two cycles
+are therefore one step apart, however far apart they are in time, and all
+positions are processed in parallel. Self-attention ignores order, so
+positional encodings are added to the inputs, and its cost grows with the
+square of the window length.
+
+\subsection{Deep models on C-MAPSS}
+Babu et al.~\cite{babu2016cnn} applied the first convolutional network to
+C-MAPSS. It reads 15-cycle windows of all sensors, chosen to fit the
+shortest test history in their data, with a first filter spanning every
+sensor and four cycles. On FD001 it reached RMSE 18.45 and score 1287.
+Zheng et al.~\cite{zheng2017lstm} fed sensor sequences to stacked LSTM
+layers with a training cap of 130~\cite{wang2019fda} and reached 16.14.
+Li, Ding and Sun~\cite{li2018dcnn} used a one-dimensional CNN on 30-cycle
+windows of the 14 informative sensors with a cap of 125: four convolution
+layers of ten filters of length 10, one of length 3 and a fully connected
+layer of 100 units. Its RMSE of 12.61 is the lowest in the comparison of Ragab et
+al.~\cite{ragab2020attention}.
+
+Attention entered with the encoder-decoder ATS2S of Ragab et
+al.~\cite{ragab2020attention}, which attends over the hidden states of an
+LSTM encoder (RMSE 12.63, score 243). Mo et al.~\cite{mo2021gcu} use a
+Transformer encoder as the backbone and add a gated convolutional unit,
+arguing that attention alone makes the learned features insensitive to local
+context; later comparisons report an FD001 RMSE of 11.27 for this model.
+Zhang, Song and Li~\cite{zhang2022dast} propose DAST, built only from
+self-attention: two encoders run in parallel, one attending across sensors
+and one across time steps. With 40-cycle windows and a cap of 125 it reports
+RMSE 11.43 and score 203.15 on FD001.
+
+Hybrid models combine learned and engineered features. Chen et
+al.~\cite{chen2021attention} weight the hidden states of an LSTM over
+30-cycle windows with an attention layer and concatenate the result with two
+handcrafted features of each window, its mean and the coefficient of a
+linear trend; they report RMSE 14.53 and score 322.44 on FD001, as tabulated
+in~\cite{zhang2022dast}. Liu et al.~\cite{liu2021rul} instead pass features
+learned by a deep CNN to a LightGBM regressor. The Phase 2 hybrid
+model follows the first route, feeding our Phase 1 features to a sequence
+encoder.
+
+Table~\ref{tab:dl-published} collects these results. The full table, with
+the source of each value, is \texttt{results/dl\_published.csv}.
+
+\begin{table}[t]
+\centering
+\caption{Published FD001 deep learning results. Values for the first seven
+rows are those collected in~\cite{ragab2020attention}, Table III; Chen et
+al.\ and DAST are from~\cite{zhang2022dast}. $w$ is the window length and
+Cap the training RUL cap. A dash marks a value not stated in the sources we
+checked. None of the sources we checked states whether test labels were
+clipped before scoring. Our models are scored against labels clipped at 125
+(Table~\ref{tab:published}).}
+\label{tab:dl-published}
+\footnotesize
+\begin{tabular}{lrrrr}
+\hline
+Method & $w$ & Cap & RMSE & $S$ \\
+\hline
+2D CNN \cite{babu2016cnn}           & 15 & --  & 18.45 & 1287 \\
+Deep LSTM \cite{zheng2017lstm}      & -- & 130 & 16.14 & 338 \\
+MODBNE \cite{zhang2017modbne}       & -- & --  & 15.04 & 334 \\
+CNN-LSTM, Wu et al.                 & -- & --  & 14.40 & 290 \\
+HDNN, Al-Dulaimi et al.             & -- & --  & 13.02 & 245 \\
+ATS2S \cite{ragab2020attention}     & 30 & 125 & 12.63 & 243 \\
+1D CNN \cite{li2018dcnn}            & 30 & 125 & 12.61 & 274 \\
+\hline
+LSTM-att.\ + features \cite{chen2021attention} & 30 & -- & 14.53 & 322 \\
+GCU-Transformer \cite{mo2021gcu}    & -- & --  & 11.27 & -- \\
+DAST \cite{zhang2022dast}           & 40 & 125 & 11.43 & 203 \\
+\hline
+Random Forest (ours, Phase 1)       & -- & 125 & 14.02 & 310 \\
+XGBoost (ours, Phase 1)             & -- & 125 & 14.08 & 347 \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{What each architecture assumes}
+An FD001 sensor trace is flat and noisy while the engine is healthy, then
+drifts steadily as the compressor degrades. Each architecture brings a
+different assumption about how to read that curve. The LSTM assumes the
+useful history can be summarised in a fixed-size state updated one cycle at
+a time. That suits damage that accumulates, but whatever the network learns
+about early cycles must survive every later update, so recent cycles tend to
+dominate. A CNN or TCN assumes the useful patterns are local and look the
+same wherever they occur: one filter detects a rise or a step anywhere in
+the window. That suits noisy sensors, where smoothing and a local slope carry
+most of the signal, and it is what our Phase 1 rolling means and slopes do
+by hand; but nothing outside the receptive field can affect the output, so
+a drift longer than the receptive field is invisible. Self-attention assumes
+nothing about locality or order: any cycle may matter to any other, and
+the weights are computed from the readings themselves, so the model can
+focus on the cycles where degradation begins. The price is that the
+structure must be learned from data, and FD001 has only 100 training
+engines. Mo et al.\ and DAST both add structure back, through a local
+convolution or a separate attention over sensors~\cite{mo2021gcu,
+zhang2022dast}, which suggests that plain attention underuses the local
+smoothness of degradation curves.
+
+\subsection{How published numbers are scored}
+Published FD001 numbers are not all produced under one protocol, and the
+differences are larger than many of the gaps between models.
+\begin{itemize}
+\item \emph{Test labels.} Clipping the test RUL at the cap moves our
+XGBoost RMSE from 15.36 to 14.08. None of the sources we checked states
+which labels it scores against.
+\item \emph{Cap and window.} Caps of 125 and 130 and windows of 15 to 40
+cycles are all in use. The shortest FD001 test engine has 31 cycles, so a
+40-cycle window needs padding or must drop engines, which changes the set
+being scored; how this is handled is not always reported.
+\item \emph{Selection and repeats.} Some papers report the best of several
+runs, or do not state how hyperparameters were chosen. Ours are chosen by
+cross validation on training engines only, and the test set is scored once.
+\item \emph{Score $S$.} $S$ is a sum over engines, so it is only comparable
+on the same 100 test engines.
+\item \emph{Transcribed values.} We copy published numbers, often from
+another paper's comparison table, rather than rerun the models.
+\end{itemize}
+Gaps below about one cycle of RMSE should therefore not be read as
+meaningful.
+
+\subsection{Sources for our design choices}
+The sequence models of Sections~\ref{sec:dl-setup} and~\ref{sec:dl-models}
+follow published practice. The 30-cycle window is that of Li et
+al.~\cite{li2018dcnn}, ATS2S~\cite{ragab2020attention} and Chen et
+al.~\cite{chen2021attention}, and fits the shortest FD001 test engine. The
+cap of 125 follows the piecewise-linear target of
+Heimes~\cite{heimes2008rnn} with the value used for FD001
+in~\cite{li2018dcnn,ragab2020attention,zhang2022dast}. Dropout follows
+Srivastava et al.~\cite{srivastava2014dropout}; the dilated causal residual
+blocks of the TCN follow Bai et al.~\cite{bai2018tcn}; the LSTM uses the
+forget gate of Gers et al.~\cite{gers2000forget}; and the Transformer's
+sinusoidal positional encoding is that of Vaswani et
+al.~\cite{vaswani2017attention}.
