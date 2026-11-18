@@ -33,6 +33,9 @@ class HybridNet(nn.Module):
         dropout: float = 0.2,
     ):
         super().__init__()
+        # Drop unused sequence encoder head so dead parameters are not kept in optimizer
+        if hasattr(encoder, "head"):
+            encoder.head = nn.Identity()
         self.encoder = encoder
         self.n_features = n_features
         self.out_dim = encoder.out_dim
@@ -130,11 +133,16 @@ def cv_residual_hybrid(
         inner_df, es_df = engine_split(df.iloc[train_idx], val_frac=es_frac, seed=seed)
         val_df = df.iloc[val_idx]
 
+        # Ensure consistent engine and cycle ordering across feature engineering and windows
+        inner_df = inner_df.sort_values(["unit", "cycle"]).reset_index(drop=True)
+        es_df = es_df.sort_values(["unit", "cycle"]).reset_index(drop=True)
+        val_df = val_df.sort_values(["unit", "cycle"]).reset_index(drop=True)
+
         # 1. Feature engineering and scaling fit strictly on inner_df
         feat_scaler = FeatureScaler.fit(inner_df, sensors, windows_tuple)
-        inner_feat = feat_scaler.transform(inner_df.sort_values(["unit", "cycle"]))
-        es_feat = feat_scaler.transform(es_df.sort_values(["unit", "cycle"]))
-        val_feat = feat_scaler.transform(val_df.sort_values(["unit", "cycle"]))
+        inner_feat = feat_scaler.transform(inner_df)
+        es_feat = feat_scaler.transform(es_df)
+        val_feat = feat_scaler.transform(val_df)
 
         # 2. Fit XGBoost on inner fold
         xgb = build_model("xgboost", **xgb_params)

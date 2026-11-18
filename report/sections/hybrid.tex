@@ -45,15 +45,18 @@ yielding $\mathbf{z}_{\mathrm{feat}} \in \mathbb{R}^{142}$.
 
 The two representations are concatenated into a joint vector
 $[\mathbf{z}_{\mathrm{seq}}, \mathbf{z}_{\mathrm{feat}}] \in \mathbb{R}^{d + 142}$,
-passed through dropout ($p=0.2$), and fed to a multi-layer perceptron (MLP) head:
+passed through input dropout ($p=0.2$), and fed to a multi-layer perceptron (MLP) head:
 \begin{align*}
-  \mathbf{h} &= \mathrm{Dropout}\Bigl(\mathrm{ReLU}\bigl(\mathbf{W}_1 [\mathbf{z}_{\mathrm{seq}}, \mathbf{z}_{\mathrm{feat}}] + \mathbf{b}_1\bigr)\Bigr), \\
+  \widetilde{\mathbf{z}} &= \mathrm{Dropout}\bigl([\mathbf{z}_{\mathrm{seq}}, \mathbf{z}_{\mathrm{feat}}]\bigr), \\
+  \mathbf{h} &= \mathrm{Dropout}\Bigl(\mathrm{ReLU}\bigl(\mathbf{W}_1 \widetilde{\mathbf{z}} + \mathbf{b}_1\bigr)\Bigr), \\
   \widehat{\mathrm{RUL}}_t &= 125 \times \bigl(\mathbf{W}_2 \mathbf{h} + b_2\bigr),
 \end{align*}
 where $\mathbf{W}_1 \in \mathbb{R}^{64 \times (d + 142)}$ and $\mathbf{W}_2 \in \mathbb{R}^{1 \times 64}$.
 The network is trained end-to-end with Adam, batch size 256, initial learning rate
 $10^{-3}$, weight decay $10^{-4}$, gradient norm clipping at $1.0$, and early stopping
 with patience 10 on a 20\% nested split of each fold's training engines.
+The sequence encoder's original linear output head is replaced with an identity mapping
+upon fusion, preventing inactive parameters from accumulating in the optimizer.
 
 \textbf{Residual Boosting Hybrid.}
 As a second hybrid paradigm, we explore whether a sequence model can learn to correct
@@ -102,8 +105,8 @@ LSTM alone & 6,177 & 14.02 $\pm$ 0.43 & 15,539 & 8.84 $\pm$ 1.10 \\
 Transformer alone & 51,009 & \textbf{13.28} $\pm$ 0.34 & 13,688 & 7.98 $\pm$ 1.37 \\
 \hline
 \textbf{Hybrids:} & & & & \\
-Hybrid (LSTM + Feat) & 17,442 & 14.35 $\pm$ 0.99 & 16,329 & 9.43 $\pm$ 1.37 \\
-Hybrid (Trans + Feat) & 64,322 & 13.47 $\pm$ 0.53 & 14,500 & \textbf{7.53} $\pm$ 1.62 \\
+Hybrid (LSTM + Feat) & 17,409 & 14.35 $\pm$ 0.99 & 16,329 & 9.43 $\pm$ 1.37 \\
+Hybrid (Trans + Feat) & 64,257 & 13.47 $\pm$ 0.53 & 14,500 & \textbf{7.53} $\pm$ 1.62 \\
 Residual (XGB + Trans) & 51,009 & 13.49 $\pm$ 0.61 & \textbf{12,817} & 8.69 $\pm$ 0.22 \\
 \hline
 \end{tabular}

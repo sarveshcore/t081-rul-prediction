@@ -350,11 +350,11 @@ Scored against RUL capped at 125 on FD001 training engines (5-fold `GroupKFold` 
 | Model | Architecture | Params | CV RMSE | NASA Score | Late RMSE (RUL $\le 50$) |
 |---|---|---|---|---|---|
 | **Parent: Transformer alone** | Sequence window | 51,009 | **13.28 ± 0.34** | 13,688 | 7.98 ± 1.37 |
-| **Hybrid (Transformer + Engineered)** | Two-branch concat | 64,322 | 13.47 ± 0.53 | 14,500 | **7.53 ± 1.62** |
+| **Hybrid (Transformer + Engineered)** | Two-branch concat | 64,257 | 13.47 ± 0.53 | 14,500 | **7.53 ± 1.62** |
 | **Hybrid (XGBoost + Trans Residual)** | Residual boosting | 51,009 | 13.49 ± 0.61 | **12,817** | 8.69 ± 0.22 |
 | **Parent: XGBoost alone** | 142 engineered features | -- | 13.99 ± 0.46 | 14,502 | 9.88 ± 0.44 |
 | **Parent: LSTM alone** | Sequence window | 6,177 | 14.02 ± 0.43 | 15,539 | 8.84 ± 1.10 |
-| **Hybrid (LSTM + Engineered)** | Two-branch concat | 17,442 | 14.35 ± 0.99 | 16,329 | 9.43 ± 1.37 |
+| **Hybrid (LSTM + Engineered)** | Two-branch concat | 17,409 | 14.35 ± 0.99 | 16,329 | 9.43 ± 1.37 |
 
 *Note: Hybrids and sequence models train on 64 engines per fold (16 held out for early stopping), while parent XGBoost trains on all 80 engines per fold.*
 
@@ -439,9 +439,8 @@ This demonstrated that manual features do not overcome recurrent model bottlenec
 
 **9. What is the parameter count difference?**
 - Standalone Transformer: 51,009 parameters.
-- Two-Branch Transformer Hybrid: 64,322 parameters (+13,313 in the MLP head:
-  $\text{Linear}(206, 64) \to 13,248$, $\text{Linear}(64, 1) \to 65$).
-- Two-Branch LSTM Hybrid: 17,442 parameters (LSTM 6,144 + head 11,298).
+- Two-Branch Transformer Hybrid: 64,257 parameters (Transformer encoder 50,944 + MLP head 13,313; original 65-parameter encoder head replaced with `nn.Identity()`).
+- Two-Branch LSTM Hybrid: 17,409 parameters (LSTM 6,144 + MLP head 11,265; original 33-parameter encoder head replaced with `nn.Identity()`).
 
 **10. What is your final takeaway from the hybrid experiments?**
 Domain feature engineering is essential for classical tabular learners (cutting XGBoost RMSE

@@ -67,6 +67,25 @@ def test_hybrid_net_parameter_count():
     assert count_params(net) == 48 + 897
 
 
+def test_hybrid_net_drops_unused_encoder_head():
+    """If the encoder carries its own head, HybridNet replaces it with Identity so dead weights are dropped."""
+    class EncoderWithHead(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.out_dim = 16
+            self.linear = nn.Linear(2, 16)
+            self.head = nn.Linear(16, 1)
+
+        def encode(self, x: torch.Tensor) -> torch.Tensor:
+            return self.linear(x[:, -1])
+
+    enc = EncoderWithHead()
+    net = HybridNet(enc, n_features=10, hidden=32, dropout=0.1)
+    assert isinstance(enc.head, nn.Identity)
+    # The head's 17 parameters (16*1 + 1) are replaced by Identity (0 params)
+    assert count_params(net) == 48 + 897
+
+
 def test_hybrid_prepare_aligns_window_and_features():
     """Row k of features must correspond to the exact engine and cycle where window k ends."""
     df = toy_engines()
