@@ -1,0 +1,79 @@
+{
+  "selection": "lowest mean RMSE, five-fold GroupKFold by unit on training engines; early stopping on 20% of each fold's training engines",
+  "target_cap": 125,
+  "window": 30,
+  "sensors": [
+    "s_2",
+    "s_3",
+    "s_4",
+    "s_7",
+    "s_8",
+    "s_9",
+    "s_11",
+    "s_12",
+    "s_13",
+    "s_14",
+    "s_15",
+    "s_17",
+    "s_20",
+    "s_21"
+  ],
+  "seed": 42,
+  "es_frac": 0.2,
+  "fit": {
+    "weight_decay": 0.0001,
+    "batch_size": 256,
+    "epochs": 100,
+    "patience": 10,
+    "grad_clip": 1.0,
+    "y_scale": 125.0
+  },
+  "selected": "transformer",
+  "models": {
+    "lstm": {
+      "net": {
+        "dropout": 0.3,
+        "hidden": 32,
+        "layers": 1
+      },
+      "lr": 0.003,
+      "n_params": 6177,
+      "rmse_mean": 14.017,
+      "rmse_std": 0.427,
+      "mae_mean": 10.001,
+      "mae_std": 0.459,
+      "best_epoch_mean": 12.6,
+      "best_epoch_max": 15
+    },
+    "tcn": {
+      "net": {
+        "channels": 64,
+        "dropout": 0.1,
+        "layers": 4
+      },
+      "lr": 0.003,
+      "n_params": 90241,
+      "rmse_mean": 15.91,
+      "rmse_std": 1.011,
+      "mae_mean": 11.974,
+      "mae_std": 1.021,
+      "best_epoch_mean": 7.2,
+      "best_epoch_max": 12
+    },
+    "transformer": {
+      "net": {
+        "d_model": 64,
+        "dropout": 0.1,
+        "layers": 1
+      },
+      "lr": 0.001,
+      "n_params": 51009,
+      "rmse_mean": 13.276,
+      "rmse_std": 0.336,
+      "mae_mean": 9.536,
+      "mae_std": 0.349,
+      "best_epoch_mean": 13.8,
+      "best_epoch_max": 16
+    }
+  }
+}
