@@ -34,7 +34,7 @@ def test_rows_are_complete_and_plausible():
     assert table.method.is_unique
     assert table.rmse.notna().all() and table.rmse.between(5, 50).all()
     assert table.values_from.notna().all()
-    assert table.rul_cap.dropna().isin([125, 130]).all()
+    assert table.rul_cap.dropna().isin([125]).all()
 
 
 def test_rows_shared_with_phase_1_match_its_comparison():

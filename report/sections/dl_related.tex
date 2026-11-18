@@ -49,7 +49,7 @@ C-MAPSS. It reads 15-cycle windows of all sensors, chosen to fit the
 shortest test history in their data, with a first filter spanning every
 sensor and four cycles. On FD001 it reached RMSE 18.45 and score 1287.
 Zheng et al.~\cite{zheng2017lstm} fed sensor sequences to stacked LSTM
-layers with a training cap of 130~\cite{wang2019fda} and reached 16.14.
+layers and reached 16.14.
 Li, Ding and Sun~\cite{li2018dcnn} used a one-dimensional CNN on 30-cycle
 windows of the 14 informative sensors with a cap of 125: four convolution
 layers of ten filters of length 10, one of length 3 and a fully connected
@@ -96,7 +96,7 @@ clipped before scoring. Our models are scored against labels clipped at 125
 Method & $w$ & Cap & RMSE & $S$ \\
 \hline
 2D CNN \cite{babu2016cnn}           & 15 & --  & 18.45 & 1287 \\
-Deep LSTM \cite{zheng2017lstm}      & -- & 130 & 16.14 & 338 \\
+Deep LSTM \cite{zheng2017lstm}      & -- & --  & 16.14 & 338 \\
 MODBNE \cite{zhang2017modbne}       & -- & --  & 15.04 & 334 \\
 CNN-LSTM, Wu et al.                 & -- & --  & 14.40 & 290 \\
 HDNN, Al-Dulaimi et al.             & -- & --  & 13.02 & 245 \\
@@ -132,8 +132,13 @@ focus on the cycles where degradation begins. The price is that the
 structure must be learned from data, and FD001 has only 100 training
 engines. Mo et al.\ and DAST both add structure back, through a local
 convolution or a separate attention over sensors~\cite{mo2021gcu,
-zhang2022dast}, which suggests that plain attention underuses the local
-smoothness of degradation curves.
+zhang2022dast}, arguing that plain attention underuses the local
+smoothness of degradation curves. Our own results do not show this on
+FD001: our plain Transformer has the lowest cross-validation RMSE of our
+networks, 13.28, while the TCN, which builds in exactly that local
+structure, has 15.91 (Section~\ref{sec:dl-models}). Their gains may come
+from other parts of their models and training, so we treat the argument as
+a hypothesis rather than a finding.
 
 \subsection{How published numbers are scored}
 Published FD001 numbers are not all produced under one protocol, and the
