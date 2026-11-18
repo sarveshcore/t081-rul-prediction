@@ -349,31 +349,36 @@ Scored against RUL capped at 125 on FD001 training engines (5-fold `GroupKFold` 
 
 | Model | Architecture | Params | CV RMSE | NASA Score | Late RMSE (RUL $\le 50$) |
 |---|---|---|---|---|---|
-| **Parent: Transformer alone** | Sequence window | 51,009 | **13.28 ± 0.34** | 13,688 | 7.98 |
-| **Hybrid (XGBoost + Trans Residual)** | Residual boosting | 51,009 | 13.49 ± 0.61 | **12,817** | 8.69 |
-| **Hybrid (Transformer + Engineered)** | Two-branch concat | 64,322 | 13.93 ± 0.46 | 14,099 | **7.58** |
-| **Parent: XGBoost alone** | 142 engineered features | -- | 13.99 ± 0.46 | 14,502 | 9.88 |
-| **Parent: LSTM alone** | Sequence window | 6,177 | 14.02 ± 0.43 | 15,539 | 8.84 |
-| **Hybrid (LSTM + Engineered)** | Two-branch concat | 17,442 | 14.48 ± 0.74 | 17,496 | 10.19 |
+| **Parent: Transformer alone** | Sequence window | 51,009 | **13.28 ± 0.34** | 13,688 | 7.98 ± 1.37 |
+| **Hybrid (Transformer + Engineered)** | Two-branch concat | 64,322 | 13.47 ± 0.53 | 14,500 | **7.53 ± 1.62** |
+| **Hybrid (XGBoost + Trans Residual)** | Residual boosting | 51,009 | 13.49 ± 0.61 | **12,817** | 8.69 ± 0.22 |
+| **Parent: XGBoost alone** | 142 engineered features | -- | 13.99 ± 0.46 | 14,502 | 9.88 ± 0.44 |
+| **Parent: LSTM alone** | Sequence window | 6,177 | 14.02 ± 0.43 | 15,539 | 8.84 ± 1.10 |
+| **Hybrid (LSTM + Engineered)** | Two-branch concat | 17,442 | 14.35 ± 0.99 | 16,329 | 9.43 ± 1.37 |
+
+*Note: Hybrids and sequence models train on 64 engines per fold (16 held out for early stopping), while parent XGBoost trains on all 80 engines per fold.*
 
 ## The Theory & Findings
 
-1. **Why the Two-Branch Hybrid wins near failure (Late RMSE 7.58):**
-   The two-branch Transformer hybrid achieves the sharpest late-stage accuracy across
-   the entire project (7.58 cycles vs 7.98 for standalone Transformer).
-   Why? Close to failure, the explicit rolling slopes and health index provide immediate,
+1. **Why the Two-Branch Hybrid reaches lowest mean Late RMSE (7.53):**
+   The two-branch Transformer hybrid achieves a mean late-stage RMSE of 7.53 cycles
+   (compared to 7.98 for standalone Transformer and 9.88 for XGBoost).
+   We hypothesize that close to failure, the explicit rolling slopes and health index provide immediate,
    sharp rate-of-wear signals that help the MLP head pin down the countdown to failure.
-2. **Why the Residual Hybrid wins on NASA score (12,817):**
-   The NASA score penalises late predictions exponentially. By training the Transformer
-   specifically on XGBoost's errors, residual boosting suppresses hazardous overestimates.
+   However, the fold-to-fold standard deviations overlap substantially ($7.53 \pm 1.62$ vs $7.98 \pm 1.37$),
+   so this margin must be verified on the test set before declaring a definitive win.
+2. **Why the Residual Hybrid reaches lowest NASA score (12,817):**
+   The NASA score penalises late predictions (overestimates) exponentially. By training the Transformer
+   specifically on XGBoost's errors, residual boosting appears to moderate hazardous upper-tail overestimates.
+   This remains a preliminary hypothesis pending detailed sign-level error breakdown.
 3. **Why the Standalone Transformer wins overall RMSE (13.28):**
    Self-attention across 30 cycles is already expressive enough to learn moving averages
    and local trends internally. Concatenating 142 features expands the MLP head from
-   64 to 206 inputs (+13k parameters), which adds slight overfitting variance across
+   64 to 206 inputs (+13k parameters), which may add slight estimation variance across
    the 64 training engines in early flat cycles.
-4. **Team recommendation:**
-   Deploy the standalone Transformer. It wins overall RMSE, has 13k fewer parameters,
-   and eliminates the complex feature-engineering pipeline in production.
+4. **Final Model Ranking:**
+   Model selection is governed by cross-validation, and the untouched test set will establish
+   the final ranking across tree ensembles, sequence models, and hybrids.
 
 ## 10 Likely Questions for Phase 2 Viva
 
@@ -391,7 +396,8 @@ In `hybrid_prepare`:
 - Neither early-stopping engines nor validation engines ever contribute to scaling or clusters.
 - Features at window $t$ are computed using cycles $\le t$ only, preserving causality.
 `tests/test_hybrid.py` explicitly verifies that corrupting future cycles has zero effect
-on earlier feature representations.
+on earlier feature representations, and that shifting apply_df sensor distributions does not alter
+scaler parameters fit on training engines.
 
 **3. Exactly which cycle's engineered features are paired with window $t$?**
 Window $t$ spans cycles $t - 29$ to $t$ (left-padded with cycle 1 for early cycles).
@@ -408,27 +414,28 @@ unit-variance inputs across all 142 features.
 The Transformer's self-attention across 30 cycles can already compute temporal differences
 and local drifts directly from raw sensors. Concatenating 142 correlated features expands
 the MLP head's input dimension from 64 to 206, adding ~13k parameters. With only 64 training
-engines per fold (~13k windows), this extra capacity causes slight overfitting in early
+engines per fold (~13k windows), this extra capacity causes slight variance in early
 healthy cycles where sensor readings are flat.
 
-**6. If the hybrid lost overall RMSE, did it win on any metric?**
+**6. If the hybrid lost overall RMSE, did it show advantages on any metric?**
 Yes, two metrics:
-- **Late-stage RMSE:** Hybrid (Transformer + Feat) reached **7.58 cycles** (best in the project),
-  beating standalone Transformer (7.98) and XGBoost (9.88). Slopes and health index provide
-  sharp local gradients near failure.
+- **Late-stage RMSE:** Hybrid (Transformer + Feat) reached **7.53 ± 1.62 cycles** (lowest mean in the project),
+  compared to standalone Transformer (7.98 ± 1.37) and XGBoost (9.88 ± 0.44). Slopes and health index provide
+  sharp local rate-of-wear signals near failure.
 - **NASA Score:** Residual Hybrid reached **12,817** (best in the project), beating
   standalone Transformer (13,688) and XGBoost (14,502).
 
 **7. How does the Residual Hybrid work?**
-XGBoost is trained on 142 engineered features of inner training engines to predict RUL.
-Its residual $r_t = y_t - \widehat{y}_{\mathrm{xgb}}$ is computed on inner and early-stopping engines.
-A Transformer encoder is then trained on 30-cycle sensor windows to predict $r_t$.
+XGBoost is trained on 142 engineered features of inner training engines (64 engines) to predict RUL.
+Its in-sample residual $r_t = y_t - \widehat{y}_{\mathrm{xgb}}$ is computed on these training engines.
+A Transformer encoder is then trained on 30-cycle sensor windows to predict $r_t$, with target scaling
+$y_{\mathrm{scale}} = 25$ cycles (since residuals are smaller) and trained for up to 60 epochs (patience 10).
 At test time, the final prediction is $\mathrm{clip}(\widehat{y}_{\mathrm{xgb}} + \widehat{r}_{\mathrm{seq}}, 0, 125)$.
 
 **8. Why did you test both Transformer and LSTM hybrids?**
 To test whether the benefit depends on encoder expressiveness. For LSTM, adding engineered
-features improved RMSE from 14.02 to 14.48? No, for LSTM, the head parameters increased from
-32 to 174, which also showed that manual features do not overcome recurrent bottlenecks.
+features also increased the MLP head parameters (from 32 to 174 input dimension), yielding 14.35 RMSE.
+This demonstrated that manual features do not overcome recurrent model bottlenecks.
 
 **9. What is the parameter count difference?**
 - Standalone Transformer: 51,009 parameters.
@@ -438,7 +445,7 @@ features improved RMSE from 14.02 to 14.48? No, for LSTM, the head parameters in
 
 **10. What is your final takeaway from the hybrid experiments?**
 Domain feature engineering is essential for classical tabular learners (cutting XGBoost RMSE
-by ~2.4 cycles), but deep sequence models with self-attention learn these representations
-automatically from raw sensor windows. The hybrid earned extra credit by scientifically testing
-the combination, revealing that while hybridisation sharpens late-stage failure predictions,
-the standalone Transformer remains the superior, more parsimonious model for deployment.
+by ~2.4 cycles and late RMSE by ~5.3 cycles), but deep sequence models with self-attention learn these
+temporal representations automatically from raw sensor windows. The hybrid earned valuable insight by
+scientifically testing the combination, revealing that while hybridisation sharpens late-stage failure
+predictions, the standalone Transformer remains the more parsimonious model overall.

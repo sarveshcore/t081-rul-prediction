@@ -6,7 +6,8 @@
 Phase~1 demonstrated that domain-engineered degradation features---rolling means,
 standard deviations, least-squares slopes over windows of 5, 10, and 20 cycles,
 and a composite health index---substantially improve classical tree regressors,
-reducing late-stage RMSE by over 2.4 cycles. Conversely, Phase~2 showed that
+reducing overall CV RMSE by over 2.4 cycles (from 16.42 to 13.99) and late-stage
+RMSE by over 5.3 cycles (from 15.23 to 9.88). Conversely, Phase~2 showed that
 deep sequence encoders, particularly the Transformer encoder, learn rich temporal
 trajectories directly from 30-cycle sensor windows without manual feature
 extraction ($13.28$ CV RMSE).
@@ -57,13 +58,19 @@ with patience 10 on a 20\% nested split of each fold's training engines.
 \textbf{Residual Boosting Hybrid.}
 As a second hybrid paradigm, we explore whether a sequence model can learn to correct
 the residual errors of gradient boosted trees. In each fold, XGBoost is trained on
-the 142 engineered features of the inner training engines to predict RUL capped at 125.
-The residual error on engine $u$ at cycle $t$ is:
+the 142 engineered features of the inner training engines (64 engines) to predict RUL
+capped at 125. The residual error on engine $u$ at cycle $t$ is:
 \[
   r_{u,t} = y_{u,t} - \widehat{y}_{\mathrm{xgb}}(u,t).
 \]
-A sequence network (Transformer or LSTM) is then trained on 30-cycle sensor windows
-to predict $r_{u,t}$. At inference time, the final prediction is:
+A Transformer sequence network is then trained on 30-cycle sensor windows to predict
+these in-sample residuals $r_{u,t}$ from the same 64 engines. Because gradient boosting
+fits its training set closely, in-sample residuals are substantially smaller in
+magnitude than generalization errors (out-of-fold residual estimation is the standard
+remedy, which we note as future work). To match this reduced scale, the network uses
+target scaling $y_{\mathrm{scale}} = 25$ cycles (rather than $125$), and is trained for
+at most 60 epochs (patience 10) with Adam ($10^{-3}$, weight decay $10^{-4}$).
+At inference time, the final prediction is:
 \[
   \widehat{y}_{\mathrm{hybrid}} = \mathrm{clip}\bigl(\widehat{y}_{\mathrm{xgb}} + \widehat{r}_{\mathrm{seq}},\ 0,\ 125\bigr).
 \]
@@ -73,54 +80,67 @@ to predict $r_{u,t}$. At inference time, the final prediction is:
 All models are evaluated on FD001 training engines using the identical five-fold
 engine-grouped cross-validation protocol as Phases~1 and~2, scoring every cycle
 against RUL capped at 125. Table~\ref{tab:hybrid-cv} reports the results side-by-side
-with both parent models from \texttt{results/hybrid\_cv.csv}.
+with both parent models from \texttt{results/hybrid\_cv.csv}. As in Section~\ref{sec:dl-models},
+the hybrid models and sequence encoders are trained on 64 engines per fold (with 16
+held out for early stopping), whereas the Phase~1 parent XGBoost row was trained
+on all 80 engines per fold.
 
-\begin{table}[t]
+\begin{table*}[t]
 \centering
 \caption{Cross-validation performance on FD001 (5-fold engine-level CV, mean $\pm$ std).
-Scored against RUL capped at 125 cycles.}
+Scored against RUL capped at 125 cycles. Parent XGBoost trained on 80 engines/fold;
+deep and hybrid models train on 64 engines/fold with 16 held out for early stopping.}
 \label{tab:hybrid-cv}
 \footnotesize
-\begin{tabular}{llrccc}
+\begin{tabular}{lrccc}
 \hline
-Model & Architecture & Params & RMSE & NASA Score & Late RMSE \\
+Model & Params & RMSE & NASA Score & Late RMSE \\
 \hline
-\textbf{Parents:} & & & & & \\
-XGBoost & 142 engineered features & -- & 13.99 $\pm$ 0.46 & 14,502 & 9.88 \\
-LSTM alone & 30-cycle sensor window & 6,177 & 14.02 $\pm$ 0.43 & 15,539 & 8.84 \\
-Transformer alone & 30-cycle sensor window & 51,009 & \textbf{13.28} $\pm$ 0.34 & 13,688 & 7.98 \\
+\textbf{Parents:} & & & & \\
+XGBoost (Phase 1) & -- & 13.99 $\pm$ 0.46 & 14,502 & 9.88 $\pm$ 0.44 \\
+LSTM alone & 6,177 & 14.02 $\pm$ 0.43 & 15,539 & 8.84 $\pm$ 1.10 \\
+Transformer alone & 51,009 & \textbf{13.28} $\pm$ 0.34 & 13,688 & 7.98 $\pm$ 1.37 \\
 \hline
-\textbf{Hybrids:} & & & & & \\
-Hybrid (LSTM + Feat) & Two-branch concat & 17,442 & 14.48 $\pm$ 0.74 & 17,496 & 10.19 \\
-Hybrid (Trans + Feat) & Two-branch concat & 64,322 & 13.93 $\pm$ 0.46 & 14,099 & \textbf{7.58} \\
-Residual (XGB + Trans) & Residual boosting & 51,009 & 13.49 $\pm$ 0.61 & \textbf{12,817} & 8.69 \\
+\textbf{Hybrids:} & & & & \\
+Hybrid (LSTM + Feat) & 17,442 & 14.35 $\pm$ 0.99 & 16,329 & 9.43 $\pm$ 1.37 \\
+Hybrid (Trans + Feat) & 64,322 & 13.47 $\pm$ 0.53 & 14,500 & \textbf{7.53} $\pm$ 1.62 \\
+Residual (XGB + Trans) & 51,009 & 13.49 $\pm$ 0.61 & \textbf{12,817} & 8.69 $\pm$ 0.22 \\
 \hline
 \end{tabular}
-\end{table}
+\end{table*}
 
 \subsection{Discussion: Did the Hybrid Earn Its Complexity?}
 
 The empirical findings yield three core insights:
 
-1. \textbf{Late-Stage Accuracy Gain:} The two-branch Hybrid (Transformer + Engineered)
-achieves the lowest late-stage RMSE of any model across the entire project ($7.58$ cycles,
-compared to $7.98$ for the standalone Transformer and $9.88$ for XGBoost). Close to
-failure, the explicit rate-of-wear signals (rolling least-squares slopes and health index)
-provide sharp local gradients that refine the network's countdown towards zero.
+\begin{enumerate}
+\item \textbf{Late-Stage Accuracy Gain:} The two-branch Hybrid (Transformer + Engineered)
+reaches the lowest mean late-stage RMSE ($7.53$ cycles, compared to $7.98$ for the
+standalone Transformer and $9.88$ for XGBoost). We hypothesize that close to failure,
+the explicit rolling slopes and health index provide localized wear-rate cues that help
+refine the network's final countdown. However, the fold-to-fold standard deviations
+overlap substantially ($7.53 \pm 1.62$ vs $7.98 \pm 1.37$), so this margin must be
+verified out-of-sample before declaring a decisive late-stage advantage.
 
-2. \textbf{NASA Asymmetric Penalty Champion:} The residual boosting hybrid achieves
-the best NASA score ($12,817$) by training the Transformer to specifically correct
-XGBoost's residual errors. Because the NASA score exponentially penalizes late
-predictions, sequence residual correction effectively suppresses hazardous overestimates.
+\item \textbf{NASA Asymmetric Penalty Champion:} The residual boosting hybrid achieves
+the best NASA score ($12,817$) by training the Transformer to predict XGBoost's
+residual errors. The NASA score penalizes late predictions (overestimates) exponentially
+more heavily than early ones. A plausible hypothesis is that sequence residual fitting
+moderates the upper tail of the tree predictions; however, in the absence of a detailed
+sign-level residual breakdown, this remains a preliminary observation.
 
-3. \textbf{Overall RMSE Trade-off:} Despite late-stage and NASA score advantages, the
-standalone Transformer encoder remains the overall RMSE champion ($13.28 \pm 0.34$).
-Concatenating 142 engineered features expands the input layer from 64 to 206 dimensions
-($+13\text{k}$ parameters in the MLP head). With only 64 training engines per fold,
-the added parameter capacity introduces slight variance in early flat cycles.
-Self-attention across 30 raw cycles is already capable of internally learning temporal
-derivatives.
+\item \textbf{Overall RMSE Trade-off:} Despite late-stage and NASA score advantages, the
+standalone Transformer encoder remains the overall RMSE champion ($13.28 \pm 0.34$,
+compared to $13.47 \pm 0.53$ for the two-branch Transformer and $13.49 \pm 0.61$ for the
+residual hybrid). We hypothesize that concatenating 142 engineered features expands the
+MLP head dimension from 64 to 206 ($+13\text{k}$ parameters), which with only 64
+training engines per fold may introduce slight estimation variance in early healthy
+cycles. Moreover, multi-head self-attention across 30 raw cycles is already capable of
+internally capturing temporal differences.
+\end{enumerate}
 
 In conclusion, while the hybrid architectures offer specialized benefits near failure
-and on asymmetric penalties, they do not justify the added pipeline complexity for
-general RUL prediction. The standalone Transformer remains the recommended production model.
+and under asymmetric penalty weighting, they introduce considerable pipeline and
+training complexity without improving overall CV RMSE over the standalone sequence
+model. The test set evaluation in Section~\ref{sec:results} will establish the definitive
+ranking among tree ensembles, sequence models, and hybrids.

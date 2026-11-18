@@ -2,11 +2,12 @@
 # ABOUTME: Verifies window-feature alignment, zero future cycle leakage, and scaler isolation.
 import numpy as np
 import pandas as pd
-import pytest
 import torch
+from sklearn.preprocessing import StandardScaler
 from torch import nn
 
-from rul.hybrid import HybridNet, cv_residual_hybrid, hybrid_prepare
+from rul.features import FeatureScaler
+from rul.hybrid import HybridNet, cv_residual_hybrid, engineered_columns, hybrid_prepare
 from rul.nets import count_params
 from rul.train import fit_net, predict_net, set_seed
 
@@ -71,16 +72,32 @@ def test_hybrid_prepare_aligns_window_and_features():
     df = toy_engines()
     sensors = ["s_2", "s_3"]
     window_len = 5
+    cols = engineered_columns(sensors, (3, 5))
     prepare = hybrid_prepare(sensors, window=window_len, windows_tuple=(3, 5))
     (X_seq, X_feat), y = prepare(df, df)
 
     sorted_df = df.sort_values(["unit", "cycle"]).reset_index(drop=True)
     assert len(X_seq) == len(X_feat) == len(sorted_df) == len(y)
 
-    for idx in [0, 5, 14, 25, len(sorted_df) - 1]:
-        row = sorted_df.iloc[idx]
-        # Check target RUL matches exactly
-        assert y[idx] == pytest.approx(row["rul"])
+    # 1. Target check
+    np.testing.assert_allclose(y, sorted_df["rul"].to_numpy())
+
+    # 2. Window terminal cycle check: last timestep of window k must match sensor values of row k
+    seq_scaler = StandardScaler().fit(sorted_df[sensors])
+    unscaled_last_step = seq_scaler.inverse_transform(X_seq[:, -1, :])
+    np.testing.assert_allclose(unscaled_last_step, sorted_df[sensors].to_numpy(), rtol=1e-5, atol=1e-5)
+
+    # 3. Feature check: cycle column and raw sensor columns must match row k
+    feat_scaler = FeatureScaler.fit(sorted_df, sensors, (3, 5))
+    fit_feat = feat_scaler.transform(sorted_df)
+    feat_norm = StandardScaler().fit(fit_feat[cols])
+    unscaled_feat = feat_norm.inverse_transform(X_feat)
+
+    cycle_idx = cols.index("cycle")
+    np.testing.assert_allclose(unscaled_feat[:, cycle_idx], sorted_df["cycle"].to_numpy(), rtol=1e-5, atol=1e-5)
+    for s in sensors:
+        s_idx = cols.index(s)
+        np.testing.assert_allclose(unscaled_feat[:, s_idx], sorted_df[s].to_numpy(), rtol=1e-5, atol=1e-5)
 
 
 def test_hybrid_prepare_fits_on_fit_df_only():
@@ -92,7 +109,7 @@ def test_hybrid_prepare_fits_on_fit_df_only():
     prepare = hybrid_prepare(sensors, window=5, windows_tuple=(3, 5))
     (X_seq1, X_feat1), y1 = prepare(fit_df, apply_df)
 
-    # Shifting apply_df RUL labels must not change feature representations
+    # 1. Shifting apply_df RUL labels must not change feature representations
     apply_modified = apply_df.copy()
     apply_modified["rul"] += 50.0
     (X_seq2, X_feat2), y2 = prepare(fit_df, apply_modified)
@@ -100,6 +117,25 @@ def test_hybrid_prepare_fits_on_fit_df_only():
     np.testing.assert_array_equal(X_seq1, X_seq2)
     np.testing.assert_array_equal(X_feat1, X_feat2)
     np.testing.assert_array_equal(y2, y1 + 50.0)
+
+    # 2. Shifting sensor values in apply_df uses fit_df's scaling parameters,
+    # proving that scalers do not fit on apply_df
+    apply_sensor_shift = apply_df.copy()
+    shift_val = 1000.0
+    apply_sensor_shift["s_2"] += shift_val
+
+    (X_seq_shift, X_feat_shift), _ = prepare(fit_df, apply_sensor_shift)
+
+    s2_std_fit = fit_df["s_2"].std(ddof=0)
+    expected_shift = shift_val / s2_std_fit
+
+    # Sequence window values for s_2 must shift by exactly expected_shift
+    np.testing.assert_allclose(X_seq_shift[:, :, 0], X_seq1[:, :, 0] + expected_shift, rtol=1e-5)
+    # Unshifted sensor s_3 in sequence window must be completely unaffected
+    np.testing.assert_array_equal(X_seq_shift[:, :, 1], X_seq1[:, :, 1])
+    # Feature matrix shape matches and incorporates sensor shift
+    assert X_feat_shift.shape == X_feat1.shape
+    assert not np.array_equal(X_feat_shift, X_feat1)
 
 
 def test_no_future_cycle_leakage_in_features():
