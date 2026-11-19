@@ -1,27 +1,31 @@
 % ABOUTME: Conclusion section of the IEEE report.
-% ABOUTME: Summary of Phase 1 findings and the plan for sequence models in Phase 2.
-\section{Conclusion and Phase 2 Plan}
+% ABOUTME: The answer to the report's question across both phases, and what would test it further.
+\section{Conclusion}
 \label{sec:conclusion}
 
-We predicted the remaining useful life of FD001 engines with engineered
-degradation features and three classical regressors, under a protocol that
-splits by engine, refits feature statistics inside every fold and scores
-the test set once. The selected XGBoost model reaches a test RMSE of 15.36
-cycles overall and 7.03 cycles on engines within 50 cycles of failure.
-Against labels clipped at 125, Random Forest and XGBoost reach 14.02 and
-14.08, ahead of published Random Forest and gradient boosting results and
-0.8 to 1.5 cycles behind the best published deep models. The engineered
-features and the tree ensembles both improve on the linear models with raw
-sensors, the two tree ensembles cannot be separated on the test set, and
-both rely mainly on the health index and the cycle number.
+We asked whether networks that learn from raw sensor sequences can match or
+beat hand-engineered degradation features for predicting the remaining
+useful life of FD001 engines, and answered it under one protocol: splits by
+engine, every statistic refitted inside each fold, hyperparameters chosen by
+cross validation, and the test set scored once per phase.
 
-Phase 2 replaces the fixed 5-, 10- and 20-cycle window summaries with models that read the
-sensor sequence directly: an LSTM, a temporal convolutional network or a
-Transformer encoder on fixed-length windows of the raw sensors. It adds an
-ablation study and a hybrid model that feeds the engineered features into
-the sequence model, which tests whether the hand-made features still help
-once the history is learned. The sequence models will be evaluated under
-the protocol of this report: FD001, five-fold cross validation grouped by
-engine, training RUL capped at 125, one prediction per test engine scored
-once, and the same RMSE, score $S$ and early and late stage metrics, so
-that their results are directly comparable with Table~\ref{tab:test-results}.
+On the test set the answer is that they match it. The selected XGBoost on
+engineered features reaches an RMSE of 15.36 cycles and the selected
+Transformer on 30-cycle sensor windows $15.37 \pm 0.66$ over five seeds,
+with a bootstrap interval for their difference that is centred on zero. The
+Transformer's lead in cross validation did not carry over. The two
+approaches differ in where their errors fall rather than in how large they
+are overall: the networks are more accurate within 50 cycles of failure,
+where maintenance is decided, and less accurate between 51 and 100 cycles,
+where degradation first becomes visible. Combining the two inputs did not
+help: the two-branch hybrid is no better than the Transformer alone on the
+test set. The residual hybrid, XGBoost corrected by a Transformer, has the
+lowest test RMSE (15.13) but was not the model selected by cross validation,
+so we report it without choosing it.
+
+Two steps would test these conclusions further: a window length chosen by
+cross validation before the test set is opened, since a 50-cycle window
+helped in the ablations; and the multi-condition subsets FD002 to FD004,
+where regime normalisation and longer histories matter more. With only 100
+test engines the intervals span several cycles, so any gap of a cycle or
+less between two models should be read as a tie.
