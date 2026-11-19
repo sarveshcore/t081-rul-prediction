@@ -2,3 +2,4 @@ comparison,rmse_difference,low,high
 Transformer minus XGBoost (Phase 1),0.011304275050211032,-2.282484776350031,2.207427887443891
 "Hybrid, Transformer + features minus XGBoost (Phase 1)",0.5568561444219835,-1.4747121415586053,2.572310462484656
 "Hybrid, Transformer + features minus Transformer",0.5455518693717725,-0.21557781441199028,1.3242567438263981
+"Residual hybrid, XGBoost + Transformer minus XGBoost (Phase 1)",-0.22780529238652036,-1.1420677934845538,0.7664010304222207

@@ -1,5 +1,5 @@
 % ABOUTME: Discussion and limitations section of the IEEE report.
-% ABOUTME: Interprets the cross validation, test and explainability results and states the limits of the study.
+% ABOUTME: Interprets both phases' cross validation, test and explainability results and states the limits of the study.
 \section{Discussion and Limitations}
 \label{sec:discussion}
 
@@ -61,16 +61,56 @@ correlated inputs: \texttt{s\_4} receives 26\% of Random Forest's impurity
 reduction but costs only 1.62 cycles when shuffled, so impurity rankings
 alone would overstate its role.
 
+\subsection{Engineered features against learned sequences}
+Cross validation favoured the networks: the Transformer reached 13.28
+against 13.99 for XGBoost on engineered features
+(Table~\ref{tab:dl-cv}). On the test set the lead is gone, 15.37 against
+15.36, and the bootstrap interval for their difference ($-2.3$ to $+2.2$
+cycles) is centred on zero (Section~\ref{sec:dl-results}). The cross
+validation lead was small to begin with: both models are the best of eight
+configurations on the same folds, so both scores are optimistic, and the
+networks train on 64 engines per fold against 80 for XGBoost. What the
+networks do show is that the sensor history alone carries the information
+that the engineered features compute by hand. Without the cycle number or
+any engineered feature, the Transformer reaches the accuracy that XGBoost
+needs the features for; on raw features XGBoost scores 16.42 in cross
+validation.
+
+The two approaches err in different places. Within 25 cycles of failure
+the Transformer's RMSE is 2.5 cycles against 6.6 for XGBoost, and over the
+33 late-stage engines 5.88 against 7.03. Between 51 and 100 cycles, where
+degradation first becomes visible, it is worse: 19 to 22 cycles against
+15.7 to 17.5. The Transformer also leans late, with a mean error of $+1.9$
+cycles, which is why its score $S$ (422) is higher than XGBoost's (389) at
+the same RMSE. The late-stage comparison was not fixed before testing and
+rests on 33 engines, so it is a pattern that holds across the seeds rather
+than a tested result.
+
+\subsection{Hybrids}
+Adding the engineered features to the Transformer did not help. The
+two-branch hybrid scores $15.92 \pm 0.66$ on the test set, 0.55 cycles
+worse than the Transformer alone, with an interval of $-0.2$ to $+1.3$. The
+residual hybrid, in which a Transformer corrects XGBoost's errors, has the
+lowest test RMSE ($15.13 \pm 0.10$) and is the most stable across seeds,
+because most of its prediction comes from the deterministic XGBoost. Its
+lead over XGBoost ($-0.23$ cycles, interval $-1.14$ to $+0.77$) is within
+noise, and it was not the model selected by cross validation, so we do not
+choose it after the fact.
+
 \subsection{Gap to deep sequence models}
-Four published deep models are more accurate than our Random Forest and
-XGBoost by 0.8 to 1.5 cycles of RMSE against clipped labels, and on the
-score $S$ six published models do better than our Random Forest and eight
-better than the selected XGBoost. These models learn
-features from windows of the raw sensor sequence. Our features look back
-at most 20 cycles and use window lengths chosen by hand, so they cannot
-represent how long a sensor has been drifting or when its drift began to
-accelerate. The remaining gap is consistent with this limit, although our
-experiments do not isolate it.
+Phase 1 left our Random Forest and XGBoost 0.8 to 1.5 cycles behind four
+published deep models against clipped labels, and suggested that features
+looking back at most 20 cycles might explain the gap. Phase 2 tested this.
+Our Transformer reads 30 cycles of raw sensors, yet against clipped labels
+it scores 14.31, behind the same published models and behind our own
+Random Forest and XGBoost; six published deep models remain ahead of every
+model of ours (Section~\ref{sec:dl-results}). Learning from the sequence
+therefore did not close the gap in our setup. Differences in protocol,
+such as test label clipping, window length and best-of-several-runs
+reporting, are large enough to explain part of it
+(Section~\ref{sec:dl-related}), and the ablations show that a 50-cycle
+window improves our Transformer in cross validation
+(Section~\ref{sec:ablations}).
 
 \subsection{Limitations}
 All results are on FD001, which has a single operating condition and a
@@ -82,6 +122,10 @@ late stage contains only 33 engines. The cap of 125 cycles bounds what the
 models can predict, so engines with more remaining life are always
 underestimated. Published FD001 results differ in protocol details that
 are not always reported, such as whether test labels are clipped and the
-window length used, so the comparison with them is approximate. Finally,
-C-MAPSS is simulated, and conclusions about which sensors matter apply to
-the simulation rather than to physical engines.
+window length used, so the comparison with them is approximate. Each network is
+trained with five seeds, which captures part but not all of its variation.
+The window length of 30 cycles was fixed before the test set was opened;
+the ablations, run afterwards, favour 50 cycles, but changing it now would
+be a choice made after seeing test results. Finally, C-MAPSS is simulated,
+and conclusions about which sensors matter apply to the simulation rather
+than to physical engines.
