@@ -35,79 +35,49 @@ def plot_ablations_comparison():
     if len(df) == 0:
         return
 
-    # Invert order so baseline appears at the top
+    # Each row is plotted as its difference from the baseline of its own run; rows scored against
+    # different labels have no reference and are left out.
+    df = df[df["reference"].notna() & (df["ablation"] != df["reference"])].reset_index(drop=True)
     df_plot = df.iloc[::-1].reset_index(drop=True)
 
-    base_row = df[df["ablation"].str.contains("Baseline")].iloc[0]
-    base_rmse = base_row["rmse_mean"]
-    base_std = base_row["rmse_std"]
-
-    # Category colors
     colors = []
     for name in df_plot["ablation"]:
-        if "Baseline" in name:
-            colors.append("#1f77b4")  # blue
-        elif "Window" in name:
-            colors.append("#ff7f0e")  # orange
+        if "Window" in name:
+            colors.append("#ff7f0e")
         elif "Target" in name:
-            colors.append("#d62728")  # red
-        elif "Regularisation" in name or "Reg" in name:
-            colors.append("#9467bd")  # purple
-        elif "Inputs" in name or "SHAP" in name:
-            colors.append("#2ca02c")  # green
+            colors.append("#d62728")
+        elif "Regularisation" in name:
+            colors.append("#9467bd")
+        elif "Inputs" in name:
+            colors.append("#2ca02c")
         elif "Hybrid" in name:
-            colors.append("#8c564b")  # brown
+            colors.append("#8c564b")
         else:
             colors.append("#7f7f7f")
 
     _fig, ax = plt.subplots(figsize=(10, max(5.0, len(df_plot) * 0.45)), dpi=300)
-
     y_positions = np.arange(len(df_plot))
-
-    # Reference baseline line and +-1 std shaded band
-    ax.axvline(base_rmse, color="#1f77b4", linestyle="--", linewidth=1.4, alpha=0.9, label=f"Baseline Transformer ({base_rmse:.2f} cycles)")
-    ax.axvspan(base_rmse - base_std, base_rmse + base_std, color="#1f77b4", alpha=0.12, label="Baseline $\\pm 1\\sigma$ fold spread")
-
-    # Plot horizontal error bars
-    bars = ax.barh(
-        y_positions,
-        df_plot["rmse_mean"],
-        xerr=df_plot["rmse_std"],
-        color=colors,
-        alpha=0.85,
-        edgecolor="black",
-        linewidth=0.6,
-        capsize=4,
-        error_kw={"elinewidth": 1.2, "ecolor": "#333333"},
-        height=0.6,
-    )
-
+    ax.axvline(0, color="#1f77b4", linestyle="--", linewidth=1.4, label="Baseline of the same run")
+    ax.barh(y_positions, df_plot["rmse_delta"], xerr=df_plot["rmse_std"], color=colors, alpha=0.85,
+            edgecolor="black", linewidth=0.6, capsize=4, error_kw={"elinewidth": 1.2, "ecolor": "#333333"},
+            height=0.6)
     ax.set_yticks(y_positions)
-    ax.set_yticklabels(df_plot["ablation"], fontweight="medium")
-    ax.set_xlabel("Five-Fold Engine Cross-Validation RMSE (cycles, lower is better)", fontweight="bold")
-    ax.set_title("Single-Factor Ablation Studies: Validation RMSE ($\\pm 1\\sigma$ Fold Spread)", fontweight="bold", pad=12)
-
-    # Annotate values and delta from baseline
-    for idx, (bar, row) in enumerate(zip(bars, df_plot.iterrows())):
-        r = row[1]
-        val = r["rmse_mean"]
-        std = r["rmse_std"]
-        diff = val - base_rmse
-        diff_str = f" (+{diff:.2f})" if diff > 0.05 else (f" ({diff:.2f})" if diff < -0.05 else " (ref)")
-        text = rf"{val:.2f} $\pm$ {std:.2f}{diff_str}"
-        ax.text(val + std + 0.3, idx, text, va="center", ha="left", fontsize=8.5, color="#222222")
-
-    min_x = max(10, df_plot["rmse_mean"].min() - 2)
-    max_x = df_plot["rmse_mean"].max() + df_plot["rmse_std"].max() + 3.5
-    ax.set_xlim(min_x, max_x)
-
-    ax.legend(loc="lower right", framealpha=0.9, fontsize=9)
+    ax.set_yticklabels(df_plot["ablation"])
+    ax.set_xlabel("CV RMSE minus baseline RMSE (cycles; error bar = the ablation's fold std)", fontweight="bold")
+    ax.set_title("Single-factor ablations against the baseline of the same run", fontweight="bold", pad=12)
+    # Labels go past the end of each error bar so they never sit on it.
+    for y, d, sd in zip(y_positions, df_plot["rmse_delta"], df_plot["rmse_std"]):
+        x = d + sd + 0.12 if d >= 0 else d - sd - 0.12
+        ax.text(x, y, f"{d:+.2f}", va="center", ha="left" if d >= 0 else "right", fontsize=8)
+    lo = (df_plot["rmse_delta"] - df_plot["rmse_std"]).min()
+    hi = (df_plot["rmse_delta"] + df_plot["rmse_std"]).max()
+    ax.set_xlim(min(lo, 0) - 0.8, hi + 0.8)
+    ax.legend(loc="lower right", fontsize=8)
     plt.tight_layout()
-
     out_file = FIGURES_DIR / "ablation_cv_comparison.png"
     plt.savefig(out_file, dpi=300)
     plt.close()
-    print(f"Saved: {out_file}")
+    print(f"Saved: {Path(out_file).relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

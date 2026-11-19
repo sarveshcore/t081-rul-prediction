@@ -108,7 +108,9 @@ plot_dataset_diagnostics()
 Following strict scientific ablation discipline:
 1. **Single Factor at a Time:** Every ablation modifies *exactly one* component relative to the baseline Transformer sequence model ($w=30$, cap 125, dropout 0.1, weight decay $10^{-4}$, patience 10 on 20% nested validation, 14 useful sensors).
 2. **Identical 5-Fold Engine Cross-Validation:** All runs use the shared engine folds from Phase 1, scoring every cycle against RUL capped at 125.
-3. **Evidence Criterion:** Differences smaller than fold standard deviation ($\\sigma \\approx 0.35-0.50$) represent sampling variance rather than statistically significant effects.
+3. **Two runs, each with its own baseline:** the same baseline configuration gives CV RMSE 13.00 with default PyTorch threads and 13.17 with one thread (13.28 in `dl_cv.csv`), because the order of floating point operations changes training. The rows come from two runs, so each is compared only with the baseline of its own run (`run` and `reference` columns, `rmse_delta`).
+4. **Evidence criterion:** a difference counts only if it is larger than the fold standard deviation of both rows and than the run to run variation of about 0.3 cycles.
+5. **No early stopping** means 40 epochs keeping the last epoch's weights (`fit_net(..., restore_best=False)`); otherwise `fit_net` restores the best early stopping epoch.
 """))
 
     # Ablations execution or load code
@@ -122,15 +124,22 @@ else:
     ablations_df = pd.read_csv(ABLATIONS_CSV)
 
 display(ablations_df[[
-    "ablation", "changed_factor", "n_params", "rmse_mean", "rmse_std",
+    "ablation", "changed_factor", "run", "rmse_mean", "rmse_std", "rmse_delta",
     "mae_mean", "rmse_late_mean", "takeaway"
 ]])
 """))
 
+    cells.append(nbf.v4.new_markdown_cell("""### Is the w=50 gain only padding?
+A padded window shows how early in life an engine is. Scoring only cycles >= 50, where no window of either length is padded, separates real history from that cue.
+"""))
+    cells.append(nbf.v4.new_code_cell("""window_check = pd.read_csv(RESULTS / "ablation_window_unpadded.csv")
+display(window_check.pivot(index="fold", columns="window", values="rmse_cycles_ge_50"))
+window_check.groupby("window")[["rmse_all_cycles", "rmse_cycles_ge_50"]].agg(["mean", "std"])
+"""))
+
     # Plot comparison code
     cells.append(nbf.v4.new_markdown_cell("""### Visualising Ablation Performance vs. Baseline
-The forest plot below illustrates 5-fold CV RMSE with $\\pm 1\\sigma$ fold standard deviation error bars.
-The blue dashed line and shaded area denote the baseline Transformer encoder ($13.28 \\pm 0.34$).
+Each bar is a row's CV RMSE minus the baseline of its own run; the error bar is that row's fold standard deviation.
 """))
 
     cells.append(nbf.v4.new_code_cell("""from scripts.plot_ablations import plot_ablations_comparison
@@ -139,30 +148,19 @@ plot_ablations_comparison()
 """))
 
     # Viva discussion markdown
-    cells.append(nbf.v4.new_markdown_cell(r"""## 3. Analysis & Viva Preparation
+    cells.append(nbf.v4.new_markdown_cell(r"""## 3. Findings
 
-### Key Physical & Methodological Insights
-1. **Window Length Trade-off ($w=15$ vs. $w=30$ vs. $w=50$):**
-   - At $w=15$, CV RMSE rises sharply to $16.96$ ($+3.68$) and late RMSE jumps to $14.18$ ($+6.20$). Truncating history to 15 cycles deprives self-attention of the temporal curvature necessary to distinguish accelerated wear from noise.
-   - At $w=50$, longer historical context yields strong in-sample fit on long engines, but forces 4,900 training cycles to be padded and, crucially, **7 test engines ($7\%$) must be artificially padded at test scoring** because their total life is shorter than 50 cycles.
-   - **$w=30$ is the maximal window size guaranteeing 100% genuine test observations without padding.**
+1. **Window length.** $w=15$ is clearly worse ($+3.96$). $w=50$ is clearly better ($-1.66$, 2.5 to 3 fold standard deviations), and stays better on cycles $\ge 50$ where nothing is padded (11.96 vs 14.19, every fold), so longer history genuinely helps on CV. We keep $w=30$ only because the window was fixed before the test set was opened in #48; switching now would be a choice made after seeing test results. It is reported as a limitation.
+2. **Target cap.** Without the cap, even with predictions clipped at 125, RMSE is 2.25 worse and the fold spread doubles. On its own uncapped target the RMSE is 38.57.
+3. **Regularisation.** No dropout ($+0.54$) and no weight decay ($+0.46$) are within the fold spread: no measurable effect. No early stopping is clearly worse ($+2.48$), and all three off ($+2.83$) is about the same, so early stopping is the regulariser that matters.
+4. **Inputs.** Top 3 SHAP sensors: $+5.70$. Top 5: $+2.44$, still well behind all 14.
+5. **Hybrid branches.** Sequence branch alone $\approx$ plain Transformer ($+0.33$). Feature branch alone $+2.29$. Both branches are no better than the sequence branch alone, overall or near failure (late 7.53 vs 7.34).
 
-2. **Target Capping (125 vs. Uncapped):**
-   - Training on uncapped targets forces the model to predict large differences in remaining life across healthy engines whose sensors show identical, un-degraded baselines.
-
-3. **Regularisation Mechanics:**
-   - Training on 64 engines per fold makes neural networks prone to overfitting. Early stopping acts as the primary regularizer, preventing divergence after validation loss bottoms out around epoch 10-16. Dropout ($0.1$) and weight decay ($10^{-4}$) prevent attention weight inflation and head co-adaptation.
-
-4. **Sensor Subsets (Top SHAP vs. 14 Sensors):**
-   - Restricting inputs to the top 3 SHAP sensors ($s_4, s_{15}, s_2$) confirms that 3 sensors capture the primary wear trajectory but lack the redundancy needed for fine-grained late predictions. Expanding to top 5 sensors ($+ s_{14}, s_{11}$) largely recovers accuracy.
-
-5. **Hybrid Architecture Decomposition:**
-   - The sequence branch provides the foundational temporal representations. While the Two-Branch Hybrid achieves the best late-stage RMSE ($7.53$), its additional MLP parameters introduce slight variance on early healthy cycles, making the standalone Transformer the overall RMSE champion.
-
-### Viva: You Must Be Able to Explain
-- **Why an ablation changes one factor at a time:** Changing multiple factors simultaneously creates confounding interactions; changing one factor isolates the precise causal contribution of each component.
-- **Why a gap smaller than the fold spread is not evidence:** If the difference between two models is smaller than the fold standard deviation across folds, the observed margin cannot be distinguished from random engine sampling variance.
-- **Why window length trades history against padding:** A longer window captures extended degradation trajectories, but increases the fraction of early cycles padded with initial readings and forces short test engines to be artificially padded at inference time.
+### Viva: you must be able to explain
+- **Why an ablation changes one factor at a time:** with two changes you cannot tell which one caused the difference.
+- **Why a gap smaller than the fold spread is not evidence:** a different split of engines into folds could move it by that much.
+- **Why each row needs a baseline from its own run:** the thread count alone moves the baseline from 13.00 to 13.17.
+- **Why window length trades history against padding:** longer windows see more history but pad more early cycles, and at $w=50$ seven test engines are shorter than the window.
 """))
 
     nb.cells = cells

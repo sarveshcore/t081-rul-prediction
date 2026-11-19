@@ -93,7 +93,7 @@ def plot_dataset_diagnostics():
     out_path = FIGURES / "ablation_coverage_padding.png"
     plt.savefig(out_path, dpi=300)
     plt.close()
-    print(f"Saved: {out_path}")
+    print(f"Saved: {Path(out_path).relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

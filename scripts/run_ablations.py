@@ -3,7 +3,9 @@
 import time
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+import torch
 
 from rul.ablations import (
     FeatureMLPNet,
@@ -38,9 +40,14 @@ TOP3_SENSORS = ["s_4", "s_15", "s_2"]
 TOP5_SENSORS = ["s_4", "s_15", "s_2", "s_14", "s_11"]
 
 
-def run_uncapped_ablation() -> pd.DataFrame:
-    """Train on uncapped RUL and score held-out folds against standard capped RUL target."""
-    rows = []
+def run_uncapped_ablation() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Train on uncapped RUL; score held-out folds two ways.
+
+    Returns (clipped, uncapped): predictions clipped at 125 and scored against the capped labels,
+    which is like for like with every other row, and raw predictions scored against the true
+    uncapped RUL, which is the model's own target but not comparable with the other rows.
+    """
+    rows, rows_uncapped = [], []
     prep = window_prepare(USEFUL_SENSORS, window=30)
     for fold, (train_idx, val_idx) in enumerate(engine_folds(train_capped, n_splits=5)):
         inner = train_uncapped.iloc[train_idx]
@@ -51,6 +58,7 @@ def run_uncapped_ablation() -> pd.DataFrame:
         # Validation inputs from inner scaling, targets evaluated against capped RUL
         val_df = train_capped.iloc[val_idx]
         X_val, y_val = prep(inner_tr, val_df)
+        _, y_val_uncapped = prep(inner_tr, train_uncapped.iloc[val_idx])
 
         set_seed(SEED)
         net = build_net("transformer", len(USEFUL_SENSORS), d_model=64, layers=1, dropout=0.1)
@@ -70,18 +78,18 @@ def run_uncapped_ablation() -> pd.DataFrame:
             y_scale=125.0,
         )
         preds = predict_net(net, X_val, y_scale=125.0)
-        metrics = evaluate(y_val, preds)
-        rows.append({
-            "fold": fold,
-            **metrics,
-            "best_epoch": history["best_epoch"],
-            "n_rows": len(y_val),
-        })
-    return pd.DataFrame(rows)
+        common = {"best_epoch": history["best_epoch"], "n_rows": len(y_val)}
+        rows.append({"fold": fold, **evaluate(y_val, np.clip(preds, 0.0, 125.0)), **common})
+        rows_uncapped.append({"fold": fold, **evaluate(y_val_uncapped, preds), **common})
+    return pd.DataFrame(rows), pd.DataFrame(rows_uncapped)
 
 
 def run_no_es_ablation(dropout: float = 0.1, weight_decay: float = 1e-4, epochs: int = 40) -> pd.DataFrame:
-    """Train without early stopping (fixed epoch count, no patience restoration)."""
+    """Train for a fixed number of epochs and keep the last epoch's weights: no early stopping.
+
+    fit_net restores the best early stopping epoch by default, so restore_best=False is what
+    removes early stopping; patience=epochs alone would still select the best epoch.
+    """
     rows = []
     prep = window_prepare(USEFUL_SENSORS, window=30)
     for fold, (train_idx, val_idx) in enumerate(engine_folds(train_capped, n_splits=5)):
@@ -104,9 +112,10 @@ def run_no_es_ablation(dropout: float = 0.1, weight_decay: float = 1e-4, epochs:
             weight_decay=weight_decay,
             batch_size=256,
             epochs=epochs,
-            patience=epochs,  # Do not stop early
+            patience=epochs,  # never stop before the last epoch
             grad_clip=1.0,
             y_scale=125.0,
+            restore_best=False,  # and keep the last epoch's weights
         )
         preds = predict_net(net, X_val, y_scale=125.0)
         metrics = evaluate(y_val, preds)
@@ -116,6 +125,38 @@ def run_no_es_ablation(dropout: float = 0.1, weight_decay: float = 1e-4, epochs:
             "best_epoch": history["best_epoch"],
             "n_rows": len(y_val),
         })
+    return pd.DataFrame(rows)
+
+
+WINDOW_UNPADDED_CSV = RESULTS_DIR / "ablation_window_unpadded.csv"
+
+
+def run_window_unpadded(windows: tuple[int, ...] = (30, 50), min_cycle: int = 50) -> pd.DataFrame:
+    """CV RMSE of the baseline Transformer per window length, on all cycles and on cycles >= min_cycle.
+
+    No window ending at cycle >= min_cycle is padded for any length up to min_cycle, so the second
+    score shows whether a longer window helps through real history rather than through padding
+    revealing how early in life an engine is.
+    """
+    rows = []
+    for w in windows:
+        prep = window_prepare(USEFUL_SENSORS, window=w)
+        for fold, (train_idx, val_idx) in enumerate(engine_folds(train_capped, n_splits=5)):
+            inner, es = engine_split(train_capped.iloc[train_idx], val_frac=0.2, seed=SEED)
+            X_tr, y_tr = prep(inner, inner)
+            X_es, y_es = prep(inner, es)
+            val_df = train_capped.iloc[val_idx]
+            X_val, y_val = prep(inner, val_df)
+            cycles = val_df.sort_values(["unit", "cycle"])["cycle"].to_numpy()
+            set_seed(SEED)
+            net = build_net("transformer", len(USEFUL_SENSORS), d_model=64, layers=1, dropout=0.1)
+            fit_net(net, X_tr, y_tr, X_es, y_es, lr=1e-3, seed=SEED, **FIT)
+            err = predict_net(net, X_val, y_scale=125.0) - y_val
+            keep = cycles >= min_cycle
+            rows.append({"window": w, "fold": fold,
+                         "rmse_all_cycles": float(np.sqrt(np.mean(err ** 2))),
+                         f"rmse_cycles_ge_{min_cycle}": float(np.sqrt(np.mean(err[keep] ** 2))),
+                         f"n_rows_ge_{min_cycle}": int(keep.sum())})
     return pd.DataFrame(rows)
 
 
@@ -132,6 +173,7 @@ def format_row(name, factor, net_builder, folds_df, takeaway):
         "mae_std": float(folds_df["mae"].std()),
         "nasa_score_mean": float(folds_df["nasa_score"].mean()),
         "rmse_late_mean": float(folds_df["rmse_late"].mean()),
+        "rmse_late_std": float(folds_df["rmse_late"].std()),
         "takeaway": takeaway,
     }
 
@@ -140,24 +182,22 @@ def main():
     print("=== Running Ablation Studies (Issue #37) ===")
     results = []
 
-    # 1. Baseline Transformer (from dl_cv.csv / dl_best_params.json)
-    dl_cv = pd.read_csv(RESULTS_DIR / "dl_cv.csv")
-    tr_row = dl_cv[dl_cv["model"] == "transformer"].iloc[0]
-    base_dict = {
-        "ablation": "Baseline (Transformer)",
-        "changed_factor": "None (reference: w=30, cap 125, reg on, 14 sensors)",
-        "n_params": int(tr_row["n_params"]),
-        "rmse_mean": float(tr_row["rmse_mean"]),
-        "rmse_std": float(tr_row["rmse_std"]),
-        "mae_mean": float(tr_row["mae_mean"]),
-        "mae_std": float(tr_row["mae_std"]),
-        "nasa_score_mean": float(tr_row["nasa_score_mean"]),
-        "rmse_late_mean": float(tr_row["rmse_late_mean"]),
-        "takeaway": "Chosen Phase 2 sequence model; achieves optimal overall CV RMSE by balancing temporal receptive field and minimal zero-padding.",
-    }
-    results.append(base_dict)
+    # 1. Baseline Transformer, rerun here with the same cv_net call as every other row, so each
+    # ablation's difference from it is like for like (dl_cv.csv comes from a separate run).
+    print("--- Baseline Transformer ---")
+    t0 = time.time()
+    prep30 = window_prepare(USEFUL_SENSORS, window=30)
+    build_t30 = lambda: build_net("transformer", len(USEFUL_SENSORS), d_model=64, layers=1, dropout=0.1)
+    fbase = cv_net(build_t30, train_capped, prep30, lr=1e-3, seed=SEED, **FIT)
+    results.append(format_row(
+        "Baseline (Transformer)",
+        "None (reference: w=30, cap 125, dropout 0.1, weight decay 1e-4, early stopping, 14 sensors)",
+        build_t30,
+        fbase,
+        "Reference for every row below, rerun in this script.",
+    ))
     pd.DataFrame(results).to_csv(ABLATIONS_CSV, index=False)
-    print("Logged: Baseline")
+    print(f"Done in {time.time()-t0:.1f}s | RMSE: {results[-1]['rmse_mean']:.3f} +- {results[-1]['rmse_std']:.3f}")
 
     # 2. Window length 15
     print("\n--- Ablation: Window length w=15 ---")
@@ -170,7 +210,7 @@ def main():
         "window = 15 (reduced from 30)",
         build_t15,
         f15,
-        "Shorter history reduces early padding but cuts temporal degradation context, slightly increasing late-stage error.",
+        "Much worse overall and near failure: 15 cycles of history is too little.",
     ))
     pd.DataFrame(results).to_csv(ABLATIONS_CSV, index=False)
     print(f"Done in {time.time()-t0:.1f}s | RMSE: {results[-1]['rmse_mean']:.3f} +- {results[-1]['rmse_std']:.3f}")
@@ -186,7 +226,7 @@ def main():
         "window = 50 (increased from 30)",
         build_t50,
         f50,
-        "Longer history provides extended context but heavily pads early cycles (4,900 train cycles and 7 test engines), yielding no net accuracy advantage.",
+        "Clearly better on CV, on every fold and also on unpadded cycles >= 50; not adopted because the test set was already opened (#48).",
     ))
     pd.DataFrame(results).to_csv(ABLATIONS_CSV, index=False)
     print(f"Done in {time.time()-t0:.1f}s | RMSE: {results[-1]['rmse_mean']:.3f} +- {results[-1]['rmse_std']:.3f}")
@@ -194,29 +234,36 @@ def main():
     # 4. Target: No RUL cap
     print("\n--- Ablation: Target: No RUL cap ---")
     t0 = time.time()
-    funcap = run_uncapped_ablation()
+    funcap, funcap_true = run_uncapped_ablation()
+    build_uncap = lambda: build_net("transformer", len(USEFUL_SENSORS), d_model=64, layers=1, dropout=0.1)
     results.append(format_row(
         "Target: No RUL cap",
-        "cap = None (trained on uncapped RUL)",
-        lambda: build_net("transformer", len(USEFUL_SENSORS), d_model=64, layers=1, dropout=0.1),
+        "cap = None (trained on uncapped RUL; predictions clipped at 125, scored against capped RUL)",
+        build_uncap,
         funcap,
-        "Removing the RUL cap forces the model to fit unobservable early health variance, inflating CV RMSE on healthy cycles.",
+        "Training without the cap is worse even when its predictions are clipped to the same scale as every other row.",
+    ))
+    results.append(format_row(
+        "Target: No RUL cap, scored on its own target",
+        "same model, raw predictions scored against true uncapped RUL (not comparable with other rows)",
+        build_uncap,
+        funcap_true,
+        "Its own target is harder: early cycles of healthy engines carry RUL up to 361 that the sensors cannot show.",
     ))
     pd.DataFrame(results).to_csv(ABLATIONS_CSV, index=False)
-    print(f"Done in {time.time()-t0:.1f}s | RMSE: {results[-1]['rmse_mean']:.3f} +- {results[-1]['rmse_std']:.3f}")
+    print(f"Done in {time.time()-t0:.1f}s | RMSE: {results[-2]['rmse_mean']:.3f} (clipped) {results[-1]['rmse_mean']:.3f} (uncapped)")
 
     # 5. Regularisation: No dropout
     print("\n--- Ablation: Reg: No dropout ---")
     t0 = time.time()
     build_nodrop = lambda: build_net("transformer", len(USEFUL_SENSORS), d_model=64, layers=1, dropout=0.0)
-    prep30 = window_prepare(USEFUL_SENSORS, window=30)
     fnodrop = cv_net(build_nodrop, train_capped, prep30, lr=1e-3, seed=SEED, **FIT)
     results.append(format_row(
         "Regularisation: No dropout",
         "dropout = 0.0 (down from 0.1)",
         build_nodrop,
         fnodrop,
-        "Zero dropout allows co-adaptation among attention heads, increasing fold-to-fold error variance.",
+        "Within the fold spread of the baseline: no measurable effect.",
     ))
     pd.DataFrame(results).to_csv(ABLATIONS_CSV, index=False)
     print(f"Done in {time.time()-t0:.1f}s | RMSE: {results[-1]['rmse_mean']:.3f} +- {results[-1]['rmse_std']:.3f}")
@@ -224,7 +271,6 @@ def main():
     # 6. Regularisation: No weight decay
     print("\n--- Ablation: Reg: No weight decay ---")
     t0 = time.time()
-    build_t30 = lambda: build_net("transformer", len(USEFUL_SENSORS), d_model=64, layers=1, dropout=0.1)
     fit_nowd = dict(FIT)
     fit_nowd["weight_decay"] = 0.0
     fnowd = cv_net(build_t30, train_capped, prep30, lr=1e-3, seed=SEED, **fit_nowd)
@@ -233,7 +279,7 @@ def main():
         "weight_decay = 0.0 (down from 1e-4)",
         build_t30,
         fnowd,
-        "Omitting L2 weight decay leads to slight parameter inflation and marginally worse late-stage error.",
+        "Within the fold spread of the baseline: no measurable effect.",
     ))
     pd.DataFrame(results).to_csv(ABLATIONS_CSV, index=False)
     print(f"Done in {time.time()-t0:.1f}s | RMSE: {results[-1]['rmse_mean']:.3f} +- {results[-1]['rmse_std']:.3f}")
@@ -244,10 +290,10 @@ def main():
     fnoes = run_no_es_ablation(dropout=0.1, weight_decay=1e-4, epochs=40)
     results.append(format_row(
         "Regularisation: No early stopping",
-        "patience = None (trained fixed 40 epochs)",
+        "no early stopping: 40 epochs, last epoch's weights kept",
         build_t30,
         fnoes,
-        "Training past the validation plateau results in slight overfitting on training engines, degrading generalization.",
+        "Keeping the last of 40 epochs instead of the best early stopping epoch.",
     ))
     pd.DataFrame(results).to_csv(ABLATIONS_CSV, index=False)
     print(f"Done in {time.time()-t0:.1f}s | RMSE: {results[-1]['rmse_mean']:.3f} +- {results[-1]['rmse_std']:.3f}")
@@ -258,10 +304,10 @@ def main():
     falloff = run_no_es_ablation(dropout=0.0, weight_decay=0.0, epochs=40)
     results.append(format_row(
         "Regularisation: All off",
-        "dropout = 0.0, weight_decay = 0.0, no early stopping",
+        "dropout = 0.0, weight_decay = 0.0, no early stopping (40 epochs, last weights)",
         build_nodrop,
         falloff,
-        "Disabling all regularizers concurrently causes compounding overfitting, with the highest validation loss and spread.",
+        "All three regularisers removed together.",
     ))
     pd.DataFrame(results).to_csv(ABLATIONS_CSV, index=False)
     print(f"Done in {time.time()-t0:.1f}s | RMSE: {results[-1]['rmse_mean']:.3f} +- {results[-1]['rmse_std']:.3f}")
@@ -277,7 +323,7 @@ def main():
         "sensors = [s_4, s_15, s_2] (down from 14)",
         build_top3,
         ftop3,
-        "Top 3 SHAP sensors capture core degradation trajectory but lose cross-sensor redundancy, degrading late-stage precision.",
+        "Much worse overall and near failure: three sensors are not enough.",
     ))
     pd.DataFrame(results).to_csv(ABLATIONS_CSV, index=False)
     print(f"Done in {time.time()-t0:.1f}s | RMSE: {results[-1]['rmse_mean']:.3f} +- {results[-1]['rmse_std']:.3f}")
@@ -293,7 +339,7 @@ def main():
         "sensors = [s_4, s_15, s_2, s_14, s_11] (down from 14)",
         build_top5,
         ftop5,
-        "Adding s_14 and s_11 recovers most performance, demonstrating that a 5-sensor subset approximates the full 14-sensor bank.",
+        "Recovers part of the gap from top 3 but stays well behind all 14 sensors.",
     ))
     pd.DataFrame(results).to_csv(ABLATIONS_CSV, index=False)
     print(f"Done in {time.time()-t0:.1f}s | RMSE: {results[-1]['rmse_mean']:.3f} +- {results[-1]['rmse_std']:.3f}")
@@ -308,7 +354,7 @@ def main():
         "HybridNet with 0 engineered features (Sequence + MLP head)",
         build_seq_mlp,
         fseq_mlp,
-        "Passing Transformer encoding through an MLP head adds 4k parameters with negligible impact over a direct linear head.",
+        "Matches the plain Transformer within the fold spread; lower late RMSE than the two-branch hybrid.",
     ))
     pd.DataFrame(results).to_csv(ABLATIONS_CSV, index=False)
     print(f"Done in {time.time()-t0:.1f}s | RMSE: {results[-1]['rmse_mean']:.3f} +- {results[-1]['rmse_std']:.3f}")
@@ -324,7 +370,7 @@ def main():
         "HybridNet with no sequence window (142 features + MLP head)",
         build_feat_mlp,
         ffeat_mlp,
-        "An MLP trained solely on engineered features without temporal sequence context underperforms sequence models (RMSE > 14.5).",
+        "Far behind the Transformer and LSTM: the sensor window carries most of the signal.",
     ))
     pd.DataFrame(results).to_csv(ABLATIONS_CSV, index=False)
     print(f"Done in {time.time()-t0:.1f}s | RMSE: {results[-1]['rmse_mean']:.3f} +- {results[-1]['rmse_std']:.3f}")
@@ -342,11 +388,23 @@ def main():
         "mae_std": float(hyb_row["mae_std"]),
         "nasa_score_mean": float(hyb_row["nasa_score_mean"]),
         "rmse_late_mean": float(hyb_row["rmse_late_mean"]),
-        "takeaway": "Combines learned sequence representation with engineered features; excels in late stage (7.53) but trails standalone Transformer overall.",
+        "rmse_late_std": float(hyb_row["rmse_late_std"]),
+        "takeaway": "Both branches: no better than the sequence branch alone, overall or near failure.",
     })
 
     final_df = pd.DataFrame(results)
+    # One run, so every row is compared with the baseline computed above in the same process.
+    # Torch thread count changes the training trajectory, so rows from separate runs are only
+    # compared with a baseline from their own run (see the run and reference columns).
+    final_df["run"] = f"{torch.get_num_threads()} torch threads"
+    final_df["reference"] = "Baseline (Transformer)"
+    final_df.loc[final_df["changed_factor"].str.contains("not comparable"), "reference"] = None
+    base = final_df.loc[final_df["ablation"] == "Baseline (Transformer)", "rmse_mean"].iloc[0]
+    final_df["rmse_delta"] = (final_df["rmse_mean"] - base).where(final_df["reference"].notna())
     final_df.to_csv(ABLATIONS_CSV, index=False)
+
+    print("\n--- Window check on unpadded cycles (w=30 vs w=50, cycles >= 50) ---")
+    run_window_unpadded().to_csv(WINDOW_UNPADDED_CSV, index=False)
     print("\n=== All Ablations Complete! Saved to results/ablations.csv ===")
     print(final_df[["ablation", "n_params", "rmse_mean", "rmse_std", "mae_mean", "rmse_late_mean"]])
 
