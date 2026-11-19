@@ -1,0 +1,149 @@
+% ABOUTME: Hybrid remaining useful life models combining sequence encoders and engineered features.
+% ABOUTME: Two-branch neural networks and residual boosting on C-MAPSS FD001.
+\section{Hybrid Architectures}
+\label{sec:hybrid}
+
+Phase~1 demonstrated that domain-engineered degradation features---rolling means,
+standard deviations, least-squares slopes over windows of 5, 10, and 20 cycles,
+and a composite health index---substantially improve classical tree regressors,
+reducing overall CV RMSE by over 2.4 cycles (from 16.42 to 13.99) and late-stage
+RMSE by over 5.3 cycles (from 15.23 to 9.88). Conversely, Phase~2 showed that
+deep sequence encoders, particularly the Transformer encoder, learn rich temporal
+trajectories directly from 30-cycle sensor windows without manual feature
+extraction ($13.28$ CV RMSE).
+
+This raises a central research question: \emph{are engineered degradation
+features and learned sequence representations complementary?} Fixed rolling
+windows explicitly isolate short-term rates of wear (slopes) and baseline-invariant
+sensor drifts, whereas sequence models learn longer-range temporal dependencies and
+engine-specific rates of aging. Here we design and evaluate two distinct hybrid
+formulations that combine both perspectives.
+
+\subsection{Architectures}
+
+\textbf{Two-Branch Concatenation Hybrid (\texttt{HybridNet}).}
+Figure~\ref{fig:hybrid-arch} shows the architecture.
+Branch~1 takes the 30-cycle sensor window $\mathbf{W}_t \in \mathbb{R}^{30 \times 14}$
+standardised on training engines and left-padded with the engine's initial reading.
+The window is encoded by either a Transformer encoder ($d=64$, 1 layer, 4 heads)
+or an LSTM ($h=32$, 1 layer) using the model's \texttt{encode()} method to produce
+an un-dropped temporal summary $\mathbf{z}_{\mathrm{seq}} \in \mathbb{R}^d$.
+Branch~2 takes the 142 engineered degradation features $\mathbf{F}_t \in \mathbb{R}^{142}$
+computed by \texttt{make\_features} at the window's terminal cycle $t$ (cycle number,
+14 raw sensors, rolling statistics, least-squares slopes, and health index).
+These features are standardised with the training fold's means and standard deviations,
+yielding $\mathbf{z}_{\mathrm{feat}} \in \mathbb{R}^{142}$.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{../figures/hybrid_architecture.png}
+  \caption{Two-branch hybrid architecture combining a 30-cycle sequence encoder
+  with 142 engineered degradation features at the window's terminal cycle, followed
+  by an MLP prediction head.}
+  \label{fig:hybrid-arch}
+\end{figure}
+
+The two representations are concatenated into a joint vector
+$[\mathbf{z}_{\mathrm{seq}}, \mathbf{z}_{\mathrm{feat}}] \in \mathbb{R}^{d + 142}$,
+passed through input dropout ($p=0.2$), and fed to a multi-layer perceptron (MLP) head:
+\begin{align*}
+  \widetilde{\mathbf{z}} &= \mathrm{Dropout}\bigl([\mathbf{z}_{\mathrm{seq}}, \mathbf{z}_{\mathrm{feat}}]\bigr), \\
+  \mathbf{h} &= \mathrm{Dropout}\Bigl(\mathrm{ReLU}\bigl(\mathbf{W}_1 \widetilde{\mathbf{z}} + \mathbf{b}_1\bigr)\Bigr), \\
+  \widehat{\mathrm{RUL}}_t &= 125 \times \bigl(\mathbf{W}_2 \mathbf{h} + b_2\bigr),
+\end{align*}
+where $\mathbf{W}_1 \in \mathbb{R}^{64 \times (d + 142)}$ and $\mathbf{W}_2 \in \mathbb{R}^{1 \times 64}$.
+The network is trained end-to-end with Adam, batch size 256, initial learning rate
+$10^{-3}$, weight decay $10^{-4}$, gradient norm clipping at $1.0$, and early stopping
+with patience 10 on a 20\% nested split of each fold's training engines.
+The sequence encoder's original linear output head is replaced with an identity mapping
+upon fusion, preventing inactive parameters from accumulating in the optimizer.
+
+\textbf{Residual Boosting Hybrid.}
+As a second hybrid paradigm, we explore whether a sequence model can learn to correct
+the residual errors of gradient boosted trees. In each fold, XGBoost is trained on
+the 142 engineered features of the inner training engines (64 engines) to predict RUL
+capped at 125. The residual error on engine $u$ at cycle $t$ is:
+\[
+  r_{u,t} = y_{u,t} - \widehat{y}_{\mathrm{xgb}}(u,t).
+\]
+A Transformer sequence network is then trained on 30-cycle sensor windows to predict
+these in-sample residuals $r_{u,t}$ from the same 64 engines. Because gradient boosting
+fits its training set closely, in-sample residuals are substantially smaller in
+magnitude than generalization errors (out-of-fold residual estimation is the standard
+remedy, which we note as future work). To match this reduced scale, the network uses
+target scaling $y_{\mathrm{scale}} = 25$ cycles (rather than $125$), and is trained for
+at most 60 epochs (patience 10) with Adam ($10^{-3}$, weight decay $10^{-4}$).
+At inference time, the final prediction is:
+\[
+  \widehat{y}_{\mathrm{hybrid}} = \mathrm{clip}\bigl(\widehat{y}_{\mathrm{xgb}} + \widehat{r}_{\mathrm{seq}},\ 0,\ 125\bigr).
+\]
+
+\subsection{Cross-Validation Evidence}
+
+All models are evaluated on FD001 training engines using the identical five-fold
+engine-grouped cross-validation protocol as Phases~1 and~2, scoring every cycle
+against RUL capped at 125. Table~\ref{tab:hybrid-cv} reports the results side-by-side
+with both parent models from \texttt{results/hybrid\_cv.csv}. As in Section~\ref{sec:dl-models},
+the hybrid models and sequence encoders are trained on 64 engines per fold (with 16
+held out for early stopping), whereas the Phase~1 parent XGBoost row was trained
+on all 80 engines per fold.
+
+\begin{table*}[t]
+\centering
+\caption{Cross-validation performance on FD001 (5-fold engine-level CV, mean $\pm$ std).
+Scored against RUL capped at 125 cycles. Parent XGBoost trained on 80 engines/fold;
+deep and hybrid models train on 64 engines/fold with 16 held out for early stopping.}
+\label{tab:hybrid-cv}
+\footnotesize
+\begin{tabular}{lrccc}
+\hline
+Model & Params & RMSE & NASA Score & Late RMSE \\
+\hline
+\textbf{Parents:} & & & & \\
+XGBoost (Phase 1) & -- & 13.99 $\pm$ 0.46 & 14,502 & 9.88 $\pm$ 0.44 \\
+LSTM alone & 6,177 & 14.02 $\pm$ 0.43 & 15,539 & 8.84 $\pm$ 1.10 \\
+Transformer alone & 51,009 & \textbf{13.28} $\pm$ 0.34 & 13,688 & 7.98 $\pm$ 1.37 \\
+\hline
+\textbf{Hybrids:} & & & & \\
+Hybrid (LSTM + Feat) & 17,409 & 14.35 $\pm$ 0.99 & 16,329 & 9.43 $\pm$ 1.37 \\
+Hybrid (Trans + Feat) & 64,257 & 13.47 $\pm$ 0.53 & 14,500 & \textbf{7.53} $\pm$ 1.62 \\
+Residual (XGB + Trans) & 51,009 & 13.49 $\pm$ 0.61 & \textbf{12,817} & 8.69 $\pm$ 0.22 \\
+\hline
+\end{tabular}
+\end{table*}
+
+\subsection{Discussion: Did the Hybrid Earn Its Complexity?}
+
+The empirical findings yield three core insights:
+
+\begin{enumerate}
+\item \textbf{Late-Stage Accuracy Gain:} The two-branch Hybrid (Transformer + Engineered)
+reaches the lowest mean late-stage RMSE ($7.53$ cycles, compared to $7.98$ for the
+standalone Transformer and $9.88$ for XGBoost). We hypothesize that close to failure,
+the explicit rolling slopes and health index provide localized wear-rate cues that help
+refine the network's final countdown. However, the fold-to-fold standard deviations
+overlap substantially ($7.53 \pm 1.62$ vs $7.98 \pm 1.37$), so this margin must be
+verified out-of-sample before declaring a decisive late-stage advantage.
+
+\item \textbf{NASA Asymmetric Penalty Champion:} The residual boosting hybrid achieves
+the best NASA score ($12,817$) by training the Transformer to predict XGBoost's
+residual errors. The NASA score penalizes late predictions (overestimates) exponentially
+more heavily than early ones. A plausible hypothesis is that sequence residual fitting
+moderates the upper tail of the tree predictions; however, in the absence of a detailed
+sign-level residual breakdown, this remains a preliminary observation.
+
+\item \textbf{Overall RMSE Trade-off:} Despite late-stage and NASA score advantages, the
+standalone Transformer encoder remains the overall RMSE champion ($13.28 \pm 0.34$,
+compared to $13.47 \pm 0.53$ for the two-branch Transformer and $13.49 \pm 0.61$ for the
+residual hybrid). We hypothesize that concatenating 142 engineered features expands the
+MLP head dimension from 64 to 206 ($+13\text{k}$ parameters), which with only 64
+training engines per fold may introduce slight estimation variance in early healthy
+cycles. Moreover, multi-head self-attention across 30 raw cycles is already capable of
+internally capturing temporal differences.
+\end{enumerate}
+
+In conclusion, while the hybrid architectures offer specialized benefits near failure
+and under asymmetric penalty weighting, they introduce considerable pipeline and
+training complexity without improving overall CV RMSE over the standalone sequence
+model. The test set evaluation in Section~\ref{sec:results} will establish the definitive
+ranking among tree ensembles, sequence models, and hybrids.
