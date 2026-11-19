@@ -97,3 +97,165 @@ The final cell uses `load_fd()`, counts each engine once, and joins supplied tru
 RUL to its last observed cycle by engine ID. It never calls `add_rul(test)` or caps
 test labels. Last observed cycle is not the failure cycle or physical engine age.
 Model evaluation remains in issue #6; these plots must not guide tuning.
+
+## Phase 2: dataset choices and ablations (#37)
+
+Code: `src/rul/ablations.py`, `scripts/run_ablations.py`,
+`notebooks/08_ablations.ipynb`, `tests/test_ablations.py`. Results:
+`results/ablations.csv`, `results/ablation_window_unpadded.csv`. Figures:
+`figures/ablation_coverage_padding.png`, `figures/ablation_cv_comparison.png`.
+Report: `report/sections/ablations.tex`.
+
+### My part in plain words
+
+Two jobs. First, justify how the sequence data is built: window length,
+padding, the RUL cap and the operating regime. Second, take the selected
+Transformer and change one thing at a time, scoring each change with the
+same five engine folds, to see what each design choice was worth. No test
+data is used for any ablation.
+
+### Dataset choices
+
+**Window length and padding.** The first w − 1 cycles of every engine have
+less history than the window, so they are left-padded with copies of the
+engine's first reading.
+
+| Window | Training windows padded | Test engines shorter than the window |
+|---|---|---|
+| 15 | 1,400 (6.8% of 20,631 cycles) | 0 |
+| 30 (chosen) | 2,900 (14.1%) | 0 (shortest test engine has 31 cycles) |
+| 50 | 4,900 (23.8%) | 7 (units 1, 2, 14, 22, 25, 39, 85) |
+
+**RUL cap at 125.** Uncapped training RUL runs from 0 to 361 (mean 107.81 ±
+68.88). Early in life the sensors show no wear, so engines with very
+different remaining lives look the same. Capping clips 8,031 training cycles
+(38.9%) onto a plateau and cuts the target's standard deviation to 41.67.
+
+**Operating regime.** FD001 has one condition: settings 1 and 2 have
+standard deviations of 0.0022 and 0.00029, and setting 3 is always 100. So
+standardising per regime and standardising globally are the same thing. I
+don't claim a clustering result for this; the setting spreads are the
+evidence.
+
+### How the ablations were run
+
+- **One change at a time** from the selected Transformer (w = 30, cap 125,
+  dropout 0.1, weight decay 1e-4, early stopping with patience 10, 14
+  sensors), on the same five engine folds, scored on every cycle against
+  RUL capped at 125.
+- **Each row is compared with a baseline from the same run.** The thread
+  count alone changes training: the same baseline gives 13.00 with default
+  threads, 13.17 with one thread, and 13.28 in `dl_cv.csv`. The rows came
+  from two runs, so `ablations.csv` has `run`, `reference` and `rmse_delta`
+  columns.
+- **Evidence rule:** a difference counts only if it is bigger than the fold
+  standard deviation of both rows and bigger than that run-to-run variation
+  of about 0.3 cycles.
+
+### Results
+
+| Change | CV RMSE | Δ vs own baseline | Late RMSE |
+|---|---|---|---|
+| Baseline, default threads | 13.00 ± 0.67 | – | 7.85 |
+| Window 15 | 16.96 ± 0.48 | +3.96 | 14.18 |
+| **Window 50** | **11.34 ± 0.52** | **−1.66** | **6.42** |
+| No dropout | 13.54 ± 0.84 | +0.54 | 8.14 |
+| No weight decay | 13.47 ± 0.71 | +0.46 | 7.69 |
+| Top 3 SHAP sensors | 18.70 ± 1.50 | +5.70 | 15.48 |
+| Top 5 SHAP sensors | 15.44 ± 1.12 | +2.44 | 11.64 |
+| Sequence branch only | 13.34 ± 0.34 | +0.33 | 7.34 |
+| Feature branch only | 15.29 ± 0.91 | +2.29 | 12.33 |
+| Both branches | 13.47 ± 0.53 | +0.47 | 7.53 |
+| Baseline, one thread | 13.17 ± 0.72 | – | 8.36 |
+| **No early stopping** | **15.65 ± 0.66** | **+2.48** | 9.74 |
+| All three regularisers off | 16.00 ± 1.13 | +2.83 | 10.11 |
+| No cap, predictions clipped at 125 | 15.42 ± 1.61 | +2.25 | 10.79 |
+| No cap, scored on true RUL | 38.57 ± 2.25 | not comparable | 11.00 |
+
+What it shows:
+- **Window:** 15 is far too short. 50 is clearly better, and it stays better
+  on cycles ≥ 50, where no window of either length is padded: 11.96 ± 0.59
+  against 14.19 ± 0.77, better on every fold. So the gain is real history,
+  not padding telling the model how young the engine is.
+- **Regularisation:** early stopping is the one that matters (+2.48 without
+  it). Dropout and weight decay are inside the fold spread, so no measurable
+  effect.
+- **Cap:** training without it is worse even when its predictions are
+  clipped to the same scale as every other row.
+- **Inputs:** three sensors are not enough; five recover part of the gap.
+- **Hybrid branches:** the sensor window carries the signal. Adding the
+  engineered features does not help, overall or near failure.
+
+### What changed in review, and why
+
+These are fixed in the merged version, and I should be able to explain each:
+1. **"No early stopping" first still early-stopped.** `fit_net` restores the
+   best early-stopping epoch at the end, so `patience = epochs` alone wasn't
+   enough. `fit_net(..., restore_best=False)` now keeps the last of 40
+   epochs. That turned "no effect" into +2.48.
+2. **The baseline was copied from `dl_cv.csv`** (13.28) instead of being
+   rerun with the rows it's compared against. Now it's rerun in each run.
+3. **The no-cap row was scored unfairly.** A model trained without the cap
+   correctly predicts RUL above 125 on healthy cycles, but was scored against
+   labels capped at 125, so its correct predictions counted as errors. Now
+   its predictions are clipped first, and the true-RUL score is a separate,
+   labelled row.
+4. **The 50-cycle result was first described as "no advantage".** It is the
+   biggest improvement in the study, so it's now reported as one.
+
+### 10 likely questions (Phase 2)
+
+**1. Why change only one factor at a time?**
+With two changes you can't tell which one caused the difference. Every row
+differs from the baseline in exactly one setting, on the same folds.
+
+**2. Why isn't a gap smaller than the fold spread evidence?**
+A different split of engines into folds could move the score by that much.
+Dropout's +0.54 is smaller than the 0.84 spread, so it could be noise.
+
+**3. Why does each row need a baseline from its own run?**
+Thread count alone moves the same baseline from 13.00 to 13.17, because the
+order of floating-point operations changes training. Comparing rows from
+different runs would mix that noise into the difference.
+
+**4. A 50-cycle window is better. Why did you keep 30?**
+30 was fixed before the test set was opened in #38, and the ablations ran
+afterwards. Switching now would be a choice made after seeing test results.
+It's reported as a limitation and the first thing to change next time.
+
+**5. Couldn't the 50-cycle gain just come from padding?**
+That was my worry too: a padded window shows how early in life an engine is.
+So we scored only cycles ≥ 50, where nothing is padded for either window.
+50 still wins on every fold (11.96 vs 14.19).
+
+**6. Why does window length trade history against padding?**
+Longer windows see more history but pad more early cycles (4,900 training
+windows at 50), and at 50 seven test engines are shorter than the window.
+
+**7. Why cap RUL at 125?**
+Early in life the sensors can't tell 300 cycles left from 150, so the
+uncapped target asks for something the data doesn't show. The cap turns
+that into a flat "healthy" plateau. Without it, CV RMSE is 2.25 worse even
+with predictions clipped.
+
+**8. Which regulariser matters most, and why?**
+Early stopping. Training on to 40 epochs and keeping the last weights,
+instead of the best early-stopping epoch, makes CV RMSE 2.48 worse; with
+only 64 training engines per fold that is the clearest sign of overfitting
+in the study. Dropout and weight decay show no measurable effect.
+
+**9. Why test the top SHAP sensors?**
+To see whether Phase 1's explanation transfers: if three sensors held the
+signal, the network wouldn't need all 14. It does: top 3 is +5.70, top 5 is
++2.44.
+
+**10. What do the hybrid branch ablations show?**
+The sequence branch alone matches the plain Transformer (+0.33, within the
+spread). The feature branch alone is clearly worse (+2.29). Both together
+are no better than the sequence branch alone, so the features add nothing
+measurable once the window is there.
+
+### Things I must check before the viva (Phase 2)
+- My slide is slide 8 of `slides/phase2_slides.pptx`; the script and answers
+  are in its speaker notes. About 1 minute.
+- Be able to explain `restore_best` and the same-run baselines without notes.
