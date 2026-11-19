@@ -395,24 +395,40 @@ Zhang et al. 2022. `--` = not stated in the sources we checked.
 
 The CSV also has LSTMBS (14.89), BiLSTM-ED (14.74) and BLCNN (13.18).
 
-### How our numbers relate to these, so far
+### How our numbers compare
 
-Our networks so far have only cross-validation results (`results/dl_cv.csv`,
-five engine folds, RUL capped at 125):
+**On cross validation** (`results/dl_cv.csv`, five engine folds, RUL capped
+at 125) the Transformer led:
 
 | Model | CV RMSE | Late RMSE (RUL ≤ 50) |
 |---|---|---|
 | Transformer | 13.28 ± 0.34 | 7.98 |
+| XGBoost, engineered (Phase 1) | 13.99 ± 0.46 | 9.88 |
 | LSTM | 14.02 ± 0.43 | 8.84 |
 | TCN | 15.91 ± 1.01 | 11.54 |
-| XGBoost, engineered (Phase 1) | 13.99 ± 0.46 | 9.88 |
 
-**These cannot be put next to the published table.** Published numbers are
-on the 100 test engines; ours are on held-out *training* engines. The only
-fair comparison is our test-set result, scored once with everything frozen.
+**On the test set** (`results/dl_test_metrics.csv`, 100 engines, scored once,
+networks over 5 seeds, true RUL) the lead is gone:
 
-Even then, published numbers differ in protocol, by more than many of the
-gaps between models:
+| Model | Test RMSE | Score S | Late RMSE |
+|---|---|---|---|
+| XGBoost (Phase 1, selected) | 15.36 | 389 | 7.03 |
+| Transformer (selected) | 15.37 ± 0.66 | 422 | 5.88 |
+| Residual hybrid | 15.13 ± 0.10 | 348 | 5.03 |
+| Two-branch hybrid | 15.92 ± 0.66 | 450 | 5.85 |
+| LSTM | 16.02 ± 0.67 | 622 | 6.21 |
+| TCN | 16.84 ± 0.93 | 584 | 8.10 |
+
+Transformer minus XGBoost, paired bootstrap over test engines
+(`results/dl_test_bootstrap.csv`): **−2.3 to +2.2 cycles, a tie.**
+
+**Against the published table** (`results/dl_test_published_comparison.csv`,
+labels clipped at 125, 21 rows): our best models rank 7th to 10th. Residual
+hybrid 13.88, Random Forest 14.02, XGBoost 14.08, Transformer 14.31. Six
+published deep models are ahead of all of them, from BLCNN (13.18) to
+GCU-Transformer (11.27).
+
+Why that comparison is only approximate:
 - **Test labels:** clipping at the cap moves our XGBoost from 15.36 to
   14.08. No source we checked says which labels it scored.
 - **Cap and window:** 125 and 130, windows from 15 to 40 cycles. The
@@ -455,9 +471,11 @@ cap 125). Among the models collected by Ragab et al., 1D CNN 12.61 and
 ATS2S 12.63 lead.
 
 **5. Your Transformer gets 13.28. Is that worse than DAST's 11.43?**
-They can't be compared. 13.28 is cross validation on training engines;
-11.43 is on the test set, under a protocol that doesn't state whether test
-labels were clipped. Only our test-set result can be placed in that table.
+13.28 can't be compared with it: that's cross validation on training
+engines, and 11.43 is a test-set number. The comparable number is our test
+RMSE against labels clipped at 125, 14.31. That is about 3 cycles behind
+DAST, but the comparison is approximate, because DAST doesn't state whether
+its test labels were clipped and uses a 40-cycle window.
 
 **6. Why aren't published FD001 numbers directly comparable?**
 Test-label clipping (our XGBoost moves from 15.36 to 14.08), caps of 125 vs
@@ -478,9 +496,9 @@ the networks comparable with our Phase 1 models.
 
 **9. Mo et al. and DAST say plain attention misses local structure. Does
 your data agree?**
-Not on FD001 so far. Our plain Transformer has the lowest CV RMSE of our
-networks (13.28), and the TCN, which builds in exactly that local
-structure, is worst (15.91). Their gains may come from other parts of their
+Not on FD001. Our plain Transformer has the lowest CV RMSE of our networks
+(13.28), and the TCN, which builds in exactly that local structure, is
+worst (15.91). The test set agrees: 15.37 against 16.84. Their gains may come from other parts of their
 models and training, so in the report we treat the argument as a
 hypothesis, not a finding.
 
@@ -491,6 +509,101 @@ comparison in `results/test_published_comparison.csv`. Adding newer models
 silently break the claim. Keeping `dl_published.csv` separate leaves Phase 1
 true as reported.
 
+### Phase 2 results questions
+
+**11. So did deep learning beat your Phase 1 model?**
+No, it tied. On the test set the Transformer scores 15.37 ± 0.66 against
+15.36 for XGBoost, and the bootstrap interval for the difference is −2.3 to
++2.2 cycles, centred on zero. Learning from raw sequences matches the
+engineered features on FD001 but does not beat them.
+
+**12. The Transformer led by 0.71 on CV. Why did that disappear?**
+Both CV scores are the best of 8 configurations on the same folds, so both
+are optimistic. The gap was close to the fold spread (0.34 and 0.46). The
+networks also trained on 64 engines per fold against 80 for XGBoost. The
+test set was never used for any choice, so it gives the honest ranking.
+
+**13. Then what did Phase 2 show?**
+Two things. The sensor history alone carries what our features compute by
+hand: with no cycle number and no features, the Transformer matches
+XGBoost, which scores 16.42 on CV without its features. And the two make
+different errors: within 25 cycles of failure the Transformer's RMSE is 2.5
+against 6.6, but between 51 and 100 cycles it is worse, 19 to 22 against
+15.7 to 17.5.
+
+**14. The residual hybrid has the lowest test RMSE. Why not choose it?**
+It wasn't the model chosen by cross validation. Picking it now, after seeing
+test scores, is exactly the bias we avoid. Its lead over XGBoost (−0.23,
+interval −1.14 to +0.77) is noise anyway.
+
+**15. Your ablation says a 50-cycle window is better. Why use 30?**
+30 was fixed before the test set was opened; the ablations ran afterwards.
+Switching now would be a choice made after seeing test results. The gain is
+real on CV: 11.34 against 13.00 in the same run, and still better on cycles
+≥ 50 where nothing is padded (11.96 against 14.19). The report lists it as
+a limitation and the first thing to change next time.
+
+**16. Does learning from sequences explain the gap to published models?**
+Phase 1 suggested our 20-cycle features caused the gap. Phase 2 tested
+that: a Transformer reading 30 raw cycles scores 14.31 against clipped
+labels, still behind the same six published models and even behind our own
+trees. So learning from the sequence alone did not close it in our setup.
+Protocol differences and window length likely explain part of it.
+
+### Report structure (Phase 2)
+
+25 pages, `report/main.pdf`, built from `report/main.tex`. Phase 2 sections
+follow the Phase 1 ones in this order:
+
+| Section | File | Owner |
+|---|---|---|
+| Deep Learning Related Work | `sections/dl_related.tex` | Navodit |
+| Deep Learning Setup | `sections/dl_setup.tex` | Sarvesh |
+| Sequence Models | `sections/dl_models.tex` | Husain |
+| Hybrid Architectures | `sections/hybrid.tex` | Aryan |
+| Dataset Choices and Ablation Studies | `sections/ablations.tex` | Trishit |
+| Deep Learning Test Results | `sections/dl_results.tex` | Sarvesh |
+| Abstract, Introduction, Discussion, Conclusion, Contributions | `main.tex`, `sections/*.tex` | Navodit |
+
+The title and abstract now ask one question, learned sequences against
+engineered features, and the conclusion answers it. Every number traces to a file in `results/`. Two diagrams span both columns
+because at one column their text printed at about 4 pt.
+
+### Teammates' Phase 2 areas, enough for cross-questions
+
+**Windows and test protocol (Sarvesh).** Each network reads the last 30
+cycles of 14 sensors. The first cycles are left-padded with the engine's
+first reading, so no false trend and no borrowing across engines. Per fold:
+64 engines fit, 16 choose the stopping epoch, 20 are scored; scalers fit on
+the 64 only. Outputs are multiplied by 125, so a new network only has to
+learn values near 1. On the test set every network is retrained on all 100
+training engines (80 fit, 20 early stopping) with seeds 42 to 46, and the
+bootstrap scores every seed on each resample of engines.
+
+**Sequence networks (Husain).** LSTM: 1 layer, hidden 32, dropout 0.3, 6,177
+parameters. TCN: 4 blocks, 64 channels, receptive field 61 cycles, 90,241
+parameters. Transformer: 1 layer, d = 64, 4 heads, 51,009 parameters. Each
+picked from 8 of 16 configurations by mean CV RMSE. The TCN overfits: after
+epoch 7 its training loss falls while its early-stopping loss rises.
+
+**Hybrids (Aryan).** Two-branch: a Transformer encodes the window, the 142
+engineered features at its last cycle are concatenated, then an MLP head
+(64 units, dropout 0.2). CV 13.47, test 15.92. Residual: XGBoost predicts,
+then a Transformer trained on XGBoost's in-sample residuals corrects it. CV
+13.49, test 15.13. Neither beats the Transformer alone on CV (13.28).
+
+**Dataset choices and ablations (Trishit).** Padded training windows: 1,400
+at w = 15, 2,900 at w = 30, 4,900 at w = 50, where 7 test engines are
+shorter than the window. The cap clips 38.9% of training labels. Each
+ablation is compared with a baseline from the same run, because thread count
+alone moves the baseline (13.00 default threads, 13.17 one thread, 13.28 in
+`dl_cv.csv`). 50-cycle window −1.66; no early stopping +2.48; no cap +2.25;
+dropout and weight decay within the fold spread; top 3 SHAP sensors +5.70;
+the feature branch adds nothing measurable.
+
 ### Things I must check before the viva (Phase 2)
 - GCU-Transformer 11.27 against Mo et al. 2021 itself, if I get the PDF.
 - Zheng et al. 2017's training cap from the original paper, if I get it.
+- My slide scripts and answers are in the speaker notes of
+  `slides/phase2_slides.pptx`, slides 1 to 3 and 11 to 13. Rehearse them
+  with a timer: about 4 minutes in total.
