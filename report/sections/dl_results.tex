@@ -7,9 +7,11 @@
 Every architecture and hyperparameter, and the choice of the Transformer as
 the selected network, were fixed by cross validation
 (Sections~\ref{sec:dl-models} and~\ref{sec:hybrid}) before the test set was
-opened. Each network is retrained exactly as inside a cross validation fold:
-80 training engines to fit, 20 held out for early stopping, scalers fitted on
-the 80 only, and the weights of the best early stopping epoch kept. No fixed
+opened. Each network is retrained with the same procedure as inside a
+cross validation fold, the same 80/20 split into fitting and early stopping
+engines, now of all 100 training engines: 80 to fit, 20 held out for early
+stopping, scalers fitted on the 80 only, and the weights of the best early
+stopping epoch kept. No fixed
 epoch count is introduced, so nothing is chosen at this stage. Because a
 network's result depends on its initial weights and batch order, every
 network is trained with 5 seeds (42 to 46), and the seed also chooses the 20
@@ -71,8 +73,10 @@ XGBoost close to failure, with late stage RMSE between 5.03 and 6.21 against
 7.03. For true RUL up to 25 cycles (19 engines), the Transformer's 5 seed
 mean prediction has an RMSE of 2.5 cycles against 6.6 for XGBoost. The
 networks lose between 51 and 100 cycles, where degradation first becomes
-visible: there the Transformer's RMSE is 19 to 22 cycles against 16 to 17
-for XGBoost. The Transformer also leans late, with a mean error of $+1.9$
+visible: there the Transformer's RMSE is 19 to 22 cycles against 15.7 to
+17.5 for XGBoost. Further from failure the Transformer is better again: 12.4
+against 16.7 for true RUL from 101 to 125 cycles (22 engines), and 20.0
+against 25.0 above the training cap (11 engines). The Transformer also leans late, with a mean error of $+1.9$
 cycles and 11 predictions more than 20 cycles late against 9 for XGBoost,
 which is why its score $S$ (422) is higher than XGBoost's (389) at the same
 RMSE. The late stage holds only 33 engines and was not part of the
@@ -91,8 +95,10 @@ late than XGBoost (7 against 9). It keeps XGBoost's accuracy in the middle of th
 most of the Transformer's gain near failure, and it is the most stable model
 across seeds, because most of its prediction comes from the deterministic
 XGBoost. It was not the model selected by cross validation, so we report it
-but do not choose it after the fact, and its 0.23 cycle lead over XGBoost is
-small compared with the bootstrap intervals above.
+but do not choose it after the fact. The same bootstrap gives its RMSE minus
+XGBoost's as $-0.23$ cycles with an interval of $-1.14$ to $+0.77$; this pair
+was not fixed before testing, so the interval is descriptive only, and it
+includes zero.
 
 \subsection{Comparison with published results}
 Against test labels clipped at 125, the residual hybrid (13.88), our Phase 1
@@ -100,7 +106,7 @@ Random Forest (14.02) and XGBoost (14.08) and the Transformer (14.31) rank
 seventh to tenth of 21 by RMSE among our models and the published FD001
 deep learning results of Table~\ref{tab:dl-published}. They are ahead of
 CNN-LSTM (14.40), the attention LSTM with handcrafted features of Chen et
-al.\ (14.53) and every older deep model, and behind six published deep
+al.\ (14.53) and the five other published models below them, and behind six published deep
 models, from BLCNN (13.18) to the GCU-Transformer (11.27). The caveats of
 Section~\ref{sec:dl-related} apply: several published values are transcribed
 from other papers, and protocols differ in details that move RMSE by about a

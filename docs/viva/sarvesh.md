@@ -243,7 +243,8 @@ hold out 20% of the fold's training engines (16 of 80) for early stopping.
 The fold's 20 scored engines are never used to stop training.
 
 **Test evaluation (#38).** Each network is retrained the same way as inside
-a fold (80 engines to fit, 20 to early stop), with 5 seeds (42 to 46), and
+a fold, with the same 80/20 fit and early-stopping split, now of all 100
+training engines (inside a CV fold it was 64 and 16), with 5 seeds (42 to 46), and
 predicts once per test engine from the window ending at its last cycle. The
 hybrids also get the 142 engineered features at that cycle. I report the
 mean and spread over the 5 seeds. XGBoost and Random Forest are not
@@ -351,8 +352,9 @@ cycle per engine against uncapped labels, a different job from CV.
 *The residual hybrid has the best test RMSE. Why isn't it your final
 model?* Because it wasn't selected by CV before the test set was opened.
 Choosing it now would make the test set a second validation set, same rule
-as RF vs XGBoost in Phase 1. Its lead over XGBoost (0.23) is far inside the
-noise anyway.
+as RF vs XGBoost in Phase 1. Its lead over XGBoost (0.23) has a bootstrap
+interval of −1.14 to +0.77, which includes zero (descriptive only, since
+that pair wasn't fixed before testing).
 
 *Why is the residual hybrid so stable across seeds (±0.10)?* Most of its
 prediction comes from XGBoost, which is deterministic. The network only adds
@@ -360,7 +362,9 @@ a small correction.
 
 *Where do the networks win and lose?* They win near failure: up to 25
 cycles left, Transformer RMSE 2.5 vs 6.6 for XGBoost. They lose from 51 to
-100 cycles, where degradation is just starting (19 to 22 vs 16 to 17).
+100 cycles, where degradation is just starting (19 to 22 vs 15.7 to 17.5),
+and win again above 100 (12.4 vs 16.7 from 101 to 125, 20.0 vs 25.0 above
+the cap).
 Caveat: the late stage is 33 engines and wasn't in the pre-registered
 bootstrap, so I call it a consistent pattern across seeds, not a tested
 result.
