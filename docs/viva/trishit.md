@@ -256,8 +256,8 @@ are no better than the sequence branch alone, so the features add nothing
 measurable once the window is there.
 
 ### Things I must check before the viva (Phase 2)
-- I present slides 12 and 13 of `slides/phase2_slides.pptx`: the conclusion
-  and the closing slide. Scripts are in the speaker notes. About 45 seconds.
-- Slide 8, the ablations, is my work but Sarvesh presents it. Be ready for
-  follow-up questions on it.
+- Who presents which slide of `slides/phase2_slides.pptx` can change, so
+  know every slide. Scripts, timings and likely questions are in the speaker
+  notes. My own work is slide 8, the ablations; questions on it come to me
+  whoever presents it.
 - Be able to explain `restore_best` and the same-run baselines without notes.
