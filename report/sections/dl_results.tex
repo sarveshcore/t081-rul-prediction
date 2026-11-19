@@ -1,0 +1,107 @@
+% ABOUTME: Deep learning test set results and the ML vs DL comparison of the IEEE report (Phase 2).
+% ABOUTME: Frozen networks and hybrids scored once on FD001 test engines over 5 seeds, with bootstrap.
+\section{Deep Learning Test Results}
+\label{sec:dl-results}
+
+\subsection{Protocol}
+Every architecture and hyperparameter, and the choice of the Transformer as
+the selected network, were fixed by cross validation
+(Sections~\ref{sec:dl-models} and~\ref{sec:hybrid}) before the test set was
+opened. Each network is retrained exactly as inside a cross validation fold:
+80 training engines to fit, 20 held out for early stopping, scalers fitted on
+the 80 only, and the weights of the best early stopping epoch kept. No fixed
+epoch count is introduced, so nothing is chosen at this stage. Because a
+network's result depends on its initial weights and batch order, every
+network is trained with 5 seeds (42 to 46), and the seed also chooses the 20
+early stopping engines. We report the mean and standard deviation over the
+seeds. Each network predicts once per test engine from the 30 cycle window
+ending at its last observed cycle; the hybrids also read the 142 engineered
+features at that cycle. As in Section~\ref{sec:results}, predictions are
+scored against the true, uncapped RUL. The Phase 1 rows reuse the per engine
+predictions of Section~\ref{sec:results} unchanged. All numbers are from
+\texttt{results/dl\_test\_metrics.csv} and
+\texttt{results/dl\_test\_bootstrap.csv}, produced by
+\texttt{notebooks/09\_dl\_results.ipynb}.
+
+\begin{table*}[t]
+\centering
+\caption{Test results on the 100 FD001 test engines, scored against the
+true RUL. Networks: mean $\pm$ standard deviation over 5 seeds. Phase 1 rows
+are single deterministic fits on engineered features. Late stage is true
+RUL $\le 50$ (33 engines). Capped RMSE scores against test labels clipped at
+125, as many published results do. CV RMSE is from cross validation and is on
+a different scale (every cycle, capped labels).}
+\label{tab:dl-test}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrrrr}
+\hline
+Model & RMSE & MAE & Score $S$ & Early RMSE & Late RMSE & Capped RMSE & CV RMSE \\
+\hline
+XGBoost (Phase 1, selected)  & 15.36 & 11.26 & 389 & 18.11 & 7.03 & 14.08 & 13.99 \\
+Random Forest (Phase 1)      & 15.23 & 11.33 & 344 & 17.88 & 7.34 & 14.02 & 14.42 \\
+\hline
+LSTM                         & 16.02 $\pm$ 0.67 & 11.80 & 622 $\pm$ 145 & 19.07 & 6.21 $\pm$ 1.15 & 15.00 & 14.02 \\
+Temporal CNN                 & 16.84 $\pm$ 0.93 & 12.51 & 584 $\pm$ 191 & 19.73 & 8.10 $\pm$ 2.12 & 15.64 & 15.91 \\
+Transformer (selected)       & 15.37 $\pm$ 0.66 & 11.77 & 422 $\pm$ 98  & 18.30 & 5.88 $\pm$ 1.59 & 14.31 & 13.28 \\
+\hline
+Hybrid, Transformer + features & 15.92 $\pm$ 0.66 & 12.13 & 450 $\pm$ 65 & 19.00 & 5.85 $\pm$ 0.95 & 14.89 & 13.47 \\
+Hybrid, LSTM + features      & 15.93 $\pm$ 0.67 & 11.90 & 493 $\pm$ 178 & 18.97 & 6.11 $\pm$ 1.11 & 14.78 & 14.35 \\
+Residual hybrid, XGBoost + Transf. & 15.13 $\pm$ 0.10 & 11.11 & 348 $\pm$ 22 & 18.14 & 5.03 $\pm$ 0.69 & 13.88 & 13.49 \\
+\hline
+\end{tabular}
+\end{table*}
+
+\subsection{Learned sequences against engineered features}
+Table~\ref{tab:dl-test} gives the results. The selected Transformer reaches
+a test RMSE of $15.37 \pm 0.66$ cycles, the same as the selected Phase 1
+model, XGBoost on engineered features (15.36). Cross validation had put the
+Transformer 0.71 cycles ahead (13.28 against 13.99); on the test set that
+lead is gone. A paired bootstrap over the 100 test engines, in which each
+resample is scored with all 5 seeds and their RMSEs averaged, gives a 95\%
+interval of $-2.3$ to $+2.2$ cycles for the Transformer minus XGBoost, so the
+two are tied. Learning from raw 30 cycle sensor windows therefore matches,
+but does not beat, our hand engineered degradation features on FD001. The
+LSTM (16.02) and the temporal CNN (16.84) are behind, in the same order as in
+cross validation.
+
+The difference between the two approaches is where along the trajectory
+the errors fall. Every network except the temporal CNN is more accurate than
+XGBoost close to failure, with late stage RMSE between 5.03 and 6.21 against
+7.03. For true RUL up to 25 cycles (19 engines), the Transformer's 5 seed
+mean prediction has an RMSE of 2.5 cycles against 6.6 for XGBoost. The
+networks lose between 51 and 100 cycles, where degradation first becomes
+visible: there the Transformer's RMSE is 19 to 22 cycles against 16 to 17
+for XGBoost. The Transformer also leans late, with a mean error of $+1.9$
+cycles and 11 predictions more than 20 cycles late against 9 for XGBoost,
+which is why its score $S$ (422) is higher than XGBoost's (389) at the same
+RMSE. The late stage holds only 33 engines and was not part of the
+comparisons fixed before testing, so the late stage advantage is a
+pattern that holds across the seeds rather than a tested result.
+
+\subsection{Hybrids}
+Adding the engineered features to the Transformer does not help on the test
+set: the two branch hybrid scores $15.92 \pm 0.66$, 0.55 cycles worse than
+the Transformer alone, with a bootstrap interval of $-0.2$ to $+1.3$ cycles
+that includes zero. Its second place in cross validation did not carry over.
+The residual hybrid, XGBoost corrected by a Transformer trained on XGBoost's
+residuals, has the lowest test RMSE of all models ($15.13 \pm 0.10$), the
+lowest late stage RMSE (5.03) and fewer predictions more than 20 cycles
+late than XGBoost (7 against 9). It keeps XGBoost's accuracy in the middle of the trajectory and
+most of the Transformer's gain near failure, and it is the most stable model
+across seeds, because most of its prediction comes from the deterministic
+XGBoost. It was not the model selected by cross validation, so we report it
+but do not choose it after the fact, and its 0.23 cycle lead over XGBoost is
+small compared with the bootstrap intervals above.
+
+\subsection{Comparison with published results}
+Against test labels clipped at 125, the residual hybrid (13.88), our Phase 1
+Random Forest (14.02) and XGBoost (14.08) and the Transformer (14.31) rank
+seventh to tenth of 21 by RMSE among our models and the published FD001
+deep learning results of Table~\ref{tab:dl-published}. They are ahead of
+CNN-LSTM (14.40), the attention LSTM with handcrafted features of Chen et
+al.\ (14.53) and every older deep model, and behind six published deep
+models, from BLCNN (13.18) to the GCU-Transformer (11.27). The caveats of
+Section~\ref{sec:dl-related} apply: several published values are transcribed
+from other papers, and protocols differ in details that move RMSE by about a
+cycle.

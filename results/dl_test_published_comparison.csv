@@ -1,0 +1,22 @@
+rank,method,source,rmse,nasa_score,where
+1,GCU-Transformer,Mo et al. 2021,11.27,,published
+2,DAST,Zhang et al. 2022,11.43,203.15,published
+3,1D CNN,Li et al. 2018,12.61,274.0,published
+4,ATS2S,Ragab et al. 2020,12.63,243.0,published
+5,HDNN,Al-Dulaimi et al. 2019,13.02,245.0,published
+6,BLCNN,Liu et al. 2019,13.18,302.0,published
+7,"Residual hybrid, XGBoost + Transformer (ours)",this project,13.876077248824938,309.26522960426126,this project
+8,Random Forest (Phase 1) (ours),this project,14.023325572378523,309.5353463971358,this project
+9,XGBoost (Phase 1) (ours),this project,14.080023394887641,346.9564935446621,this project
+10,Transformer (ours),this project,14.306135118024258,391.93348934796336,this project
+11,CNN-LSTM,Wu et al. 2019,14.4,290.0,published
+12,LSTM attention + handcrafted,Chen et al. 2021,14.53,322.44,published
+13,BiLSTM-ED,Yu et al. 2019,14.74,273.0,published
+14,"Hybrid, LSTM + features (ours)",this project,14.783427372074971,457.2980710297173,this project
+15,LSTMBS,Liao et al. 2018,14.89,481.0,published
+16,"Hybrid, Transformer + features (ours)",this project,14.894169594338013,414.80080277491413,this project
+17,LSTM (ours),this project,15.003713638341864,593.0512087201103,this project
+18,MODBNE,Zhang et al. 2017,15.04,334.0,published
+19,Temporal CNN (ours),this project,15.641096741114485,538.2365252312977,this project
+20,Deep LSTM,Zheng et al. 2017,16.14,338.0,published
+21,2D CNN,Babu et al. 2016,18.45,1287.0,published

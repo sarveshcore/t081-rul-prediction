@@ -32,6 +32,31 @@ models, and is 0.8 to 1.5 cycles behind four deep models (RMSE 12.61 to 13.18). 
 NASA score, six published models do better than Random Forest (310) and eight do better than
 XGBoost (347). See `report/sections/results.tex`.
 
+### Phase 2: sequence models
+
+From `results/dl_test_metrics.csv`, made by `notebooks/09_dl_results.ipynb`. The same 100
+test engines, scored once against the true RUL. Each network reads a 30-cycle window of the
+14 useful sensors, uses the settings frozen by cross validation, and is trained with 5 seeds;
+networks show the mean ± standard deviation over seeds. Phase 1 rows are unchanged.
+
+| Model | RMSE | MAE | NASA score | RMSE late |
+|---|---|---|---|---|
+| XGBoost (Phase 1, selected) | 15.36 | 11.26 | 389 | 7.03 |
+| LSTM | 16.02 ± 0.67 | 11.80 | 622 | 6.21 |
+| Temporal CNN | 16.84 ± 0.93 | 12.51 | 584 | 8.10 |
+| Transformer (selected) | 15.37 ± 0.66 | 11.77 | 422 | 5.88 |
+| Hybrid, Transformer + engineered features | 15.92 ± 0.66 | 12.13 | 450 | 5.85 |
+| Hybrid, LSTM + engineered features | 15.93 ± 0.67 | 11.90 | 493 | 6.11 |
+| Residual hybrid, XGBoost + Transformer | 15.13 ± 0.10 | 11.11 | 348 | 5.03 |
+
+The selected Transformer ties XGBoost on engineered features: a paired bootstrap over the
+test engines puts the RMSE difference between −2.3 and +2.2 cycles. Learning from raw
+sensor windows matches the engineered features but does not beat them. The networks are
+more accurate close to failure and less accurate 51 to 100 cycles out. Adding the
+engineered features to the Transformer did not help on the test set. The residual hybrid
+has the lowest RMSE but was not the model selected by cross validation. See
+`report/sections/dl_results.tex`.
+
 ## Reproduce
 
 Needs Python 3.12 to 3.14. PyTorch 2.14.1 has no wheels for 3.15 yet.
@@ -43,16 +68,20 @@ pytest
 ```
 
 Then `make all` runs ruff, pytest and every notebook in `notebooks/` in numeric order,
-regenerating `results/` and `figures/` (about 11 minutes on an Apple M3 Pro). It stops at
-the first notebook that fails.
+regenerating `results/` and `figures/`. It stops at the first notebook that fails.
+Notebook 06 retrains every network in the cross validation search (about 55 minutes on
+CPU). Notebooks 07 and 09 load saved results by default; set `LOAD_SAVED = False` in 07 or
+`RETRAIN = True` in 09 to retrain (09 takes about 30 minutes in one process).
 Without `make` (for example on Windows), run the notebooks by hand in numeric order.
 
 ## Layout
 
 ```
 data/raw/        C-MAPSS FD001 text files
-src/rul/         data, eda, split, features, models, evaluate, explain
-notebooks/       01_eda, 02_features, 03_models, 04_results, 05_explain
+src/rul/         data, eda, split, features, models, evaluate, explain,
+                 sequences, train, nets, hybrid, holdout
+notebooks/       01_eda, 02_features, 03_models, 04_results, 05_explain,
+                 06_sequence_models, 07_hybrid, 09_dl_results
 tests/           pytest checks for leakage and correctness
 figures/         plots used by the report and slides
 results/         metrics and chosen hyperparameters
@@ -63,13 +92,13 @@ docs/viva/       each member's viva notes
 
 ## Team
 
-| Member | Owns |
-|---|---|
-| Sarvesh Srinath | Repository, engine level split, evaluation, final results, review |
-| Trishit Swarnakar | Data loading, EDA, RUL target |
-| Aryan Kumar | Feature engineering |
-| Husain Khorakiwala | Models, tuning, explainability |
-| Navodit Sharma | Literature review, report, slides |
+| Member | Phase 1 | Phase 2 |
+|---|---|---|
+| Sarvesh Srinath | Repository, engine level split, evaluation, final results, review | Sensor windows, shared training loop, DL test results |
+| Trishit Swarnakar | Data loading, EDA, RUL target | DL dataset choices and ablations |
+| Aryan Kumar | Feature engineering | Hybrid models |
+| Husain Khorakiwala | Models, tuning, explainability | LSTM, temporal CNN, Transformer |
+| Navodit Sharma | Literature review, report, slides | DL literature review, report, slides |
 
 How we work: [CONTRIBUTING.md](CONTRIBUTING.md). Plan and dates:
 [ROADMAP.md](ROADMAP.md).
