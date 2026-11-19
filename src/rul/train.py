@@ -53,8 +53,11 @@ def _loss(net: nn.Module, inputs: tuple[torch.Tensor, ...], y: torch.Tensor,
 def fit_net(net: nn.Module, train_inputs, y_train, val_inputs, y_val, *, epochs: int = 100,
             batch_size: int = 256, lr: float = 1e-3, weight_decay: float = 0.0,
             patience: int = 10, grad_clip: float | None = 1.0, seed: int = SEED,
-            y_scale: float = 125.0) -> dict:
+            y_scale: float = 125.0, restore_best: bool = True) -> dict:
     """Train with Adam on MSE, stop after patience epochs without improvement, keep best weights.
+
+    restore_best=False keeps the weights of the last epoch trained instead of the best one; with
+    patience >= epochs that trains for exactly epochs epochs with no early stopping at all.
 
     The net must return one value per row, shape (n,). Its output is multiplied by y_scale,
     125 by default to match the RUL cap, so predict with the same y_scale. Losses are in
@@ -91,7 +94,8 @@ def fit_net(net: nn.Module, train_inputs, y_train, val_inputs, y_val, *, epochs:
         elif epoch - history["best_epoch"] >= patience:
             break
 
-    net.load_state_dict(best_state)
+    if restore_best:
+        net.load_state_dict(best_state)
     return history
 
 
