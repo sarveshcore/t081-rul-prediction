@@ -205,3 +205,183 @@ just starts to show.
 ## Things I must check before the viva
 - That Navodit's literature review (#8) cites the same published numbers
   as `results/test_published_comparison.csv`.
+
+
+# Phase 2: windows, training loop and DL test results (#33, #38)
+
+My part: turning each engine into sensor windows, the training loop every
+network shares, the nested validation that keeps early stopping honest, and
+the one-time test set evaluation of every network. Code:
+`src/rul/sequences.py`, `src/rul/train.py`, `src/rul/holdout.py`. Notebook:
+`notebooks/09_dl_results.ipynb`. Report: `report/sections/dl_setup.tex`,
+`report/sections/dl_results.tex`.
+
+## My Phase 2 part in plain words
+
+**Windows.** A network reads the last 30 cycles of the 14 useful sensors
+and predicts the RUL at the last of those cycles. Every engine gets one
+window ending at every cycle, so the networks are scored on exactly the
+same rows and folds as Phase 1. A window never mixes two engines.
+
+**Padding.** The first 29 cycles of an engine don't have 30 cycles of
+history. I left pad them with copies of the engine's first reading instead
+of dropping them, because dropping them would remove exactly the healthy
+early cycles, and a healthy engine's sensors are flat, so repeating cycle 1
+adds no fake trend.
+
+**Why 30.** The shortest FD001 test engine has 31 cycles, so every test
+engine is scored on real history, never padding. The same window as Li et
+al. 2018 and ATS2S.
+
+**Training loop.** Adam on mean squared error, batches of 256, gradient
+norm clipped at 1, seeded. The net's output is multiplied by 125 (the cap),
+so a new net, whose outputs start near 0, only has to learn values near 1.
+
+**Nested validation.** Early stopping picks the number of epochs by
+watching validation loss, so it is tuning. Inside each of the 5 CV folds I
+hold out 20% of the fold's training engines (16 of 80) for early stopping.
+The fold's 20 scored engines are never used to stop training.
+
+**Test evaluation (#38).** Each network is retrained the same way as inside
+a fold, with the same 80/20 fit and early-stopping split, now of all 100
+training engines (inside a CV fold it was 64 and 16), with 5 seeds (42 to 46), and
+predicts once per test engine from the window ending at its last cycle. The
+hybrids also get the 142 engineered features at that cycle. I report the
+mean and spread over the 5 seeds. XGBoost and Random Forest are not
+retrained: their Phase 1 test predictions are read from
+`results/test_predictions.csv`.
+
+## The theory
+
+### Why nest the early stopping split
+Anything chosen by looking at an engine's error is tuned on that engine. If
+early stopping watched the scored engines, it would stop at the epoch that
+happens to suit them, and the CV error would come out too low. Holding out
+separate engines for early stopping keeps the scored engines untouched,
+the same reason the test set is used only once.
+
+### Why 5 seeds
+A network's result depends on its random starting weights and the order of
+its batches. With one seed, a lucky or unlucky draw could flip a ranking.
+Five seeds show how much of a gap is just initialisation. The seed here also
+picks which 20 engines are held out for early stopping, so the spread
+includes that choice too.
+
+### Why not retrain on all 100 engines with a fixed epoch count
+That would need a new hyperparameter (how many epochs) chosen without any
+validation. Keeping the exact fold procedure means the test score is for the
+same model that cross-validation measured.
+
+### Paired bootstrap, averaged over seeds
+Draw 100 engines with replacement, score both models on that same draw,
+take the RMSE difference, repeat 10,000 times, report the 2.5th and 97.5th
+percentiles. "Paired" means both models see the same engines each time, so
+engine difficulty cancels. For a network, every draw is scored with all 5
+seeds and their RMSEs averaged, so the interval is for the same number as
+the results table (the mean over seeds), not for an averaged prediction,
+which would score better than any single network and is not what we report.
+`seed_bootstrap` in `src/rul/holdout.py` does this, and its tests check that
+it averages RMSE over seeds rather than predictions.
+
+### Why the bootstrap comparisons were fixed in advance
+If I chose which pairs to test after seeing the test numbers, I would test
+the ones that look interesting, and some would look significant by chance.
+The pairs were fixed before the test set was opened: the selected network
+(Transformer) against the selected Phase 1 model (XGBoost), and the
+Transformer hybrid against both of its parents.
+
+## 10 likely questions
+
+1. *Why pad with the first reading and not zeros?* Zeros after
+   standardising mean "average engine", which a healthy engine is not, and a
+   jump from 0 to the real values would look like a sudden change. The first
+   reading is flat and belongs to the same engine.
+2. *Does padding leak anything?* No. It only copies the engine's own first
+   cycle, which is in the past of every window.
+3. *Why is the scaler fitted inside each fold?* Its mean and standard
+   deviation are statistics of the data. Fitting it on scored engines would
+   leak their distribution into training.
+4. *Why one window per cycle and not one per engine?* One per engine would
+   give 100 training rows. One per cycle gives about 20,000 and matches the
+   rows Phase 1 was scored on.
+5. *Why multiply the output by 125?* Initial outputs are near 0. Without
+   scaling, the last layer must grow its weights a lot to reach 125, which
+   was slow and made batch 256 fail to train at all (fixed in `83dd63b`).
+6. *What does gradient clipping do?* It rescales the gradient when its norm
+   is above 1, so one bad batch can't throw the weights far.
+7. *Why do the networks train on 64 engines per fold and XGBoost on 80?*
+   16 are held out for early stopping. The networks learn from a fifth fewer
+   engines, so the comparison slightly favours Phase 1.
+8. *Why is test RMSE higher than CV RMSE?* Same as Phase 1: CV scores every
+   cycle against the capped label, the test scores one cycle per engine
+   against the uncapped label, and 11 test engines have true RUL above 125.
+9. *Why report the mean over seeds and not the best seed?* Picking the best
+   seed after seeing the test score is selecting on the test set.
+10. *Why not average the 5 seeds' predictions into an ensemble?* It would
+    be a different model, one cross-validation never measured. It is fine
+    for the plot, labelled as such, but not as a reported score.
+
+## DL test results (#38)
+
+Notebook `notebooks/09_dl_results.ipynb`, numbers in
+`results/dl_test_metrics.csv` and `results/dl_test_bootstrap.csv`, report
+`report/sections/dl_results.tex`.
+
+**Headline numbers (true RUL, 100 engines, mean ± std over 5 seeds).**
+
+| Model | RMSE | NASA score | Late RMSE |
+|---|---|---|---|
+| XGBoost (Phase 1, selected) | 15.36 | 389 | 7.03 |
+| Transformer (selected) | 15.37 ± 0.66 | 422 | 5.88 |
+| Residual hybrid | 15.13 ± 0.10 | 348 | 5.03 |
+| Hybrid, Transformer + features | 15.92 ± 0.66 | 450 | 5.85 |
+| LSTM | 16.02 ± 0.67 | 622 | 6.21 |
+| Temporal CNN | 16.84 ± 0.93 | 584 | 8.10 |
+
+**The answer to the brief in one line.** Learning from raw sensor windows
+ties hand-engineered features on FD001 (15.37 vs 15.36, bootstrap interval
+−2.3 to +2.2), and does better close to failure.
+
+**Likely questions.**
+
+*The Transformer was 0.71 ahead in CV. Why is it tied on the test set?* CV
+gaps of under a cycle are small next to test noise: with 100 engines the
+bootstrap interval is about ±2.2 cycles wide. The test set also scores one
+cycle per engine against uncapped labels, a different job from CV.
+
+*The residual hybrid has the best test RMSE. Why isn't it your final
+model?* Because it wasn't selected by CV before the test set was opened.
+Choosing it now would make the test set a second validation set, same rule
+as RF vs XGBoost in Phase 1. Its lead over XGBoost (0.23) has a bootstrap
+interval of −1.14 to +0.77, which includes zero (descriptive only, since
+that pair wasn't fixed before testing).
+
+*Why is the residual hybrid so stable across seeds (±0.10)?* Most of its
+prediction comes from XGBoost, which is deterministic. The network only adds
+a small correction.
+
+*Where do the networks win and lose?* They win near failure: up to 25
+cycles left, Transformer RMSE 2.5 vs 6.6 for XGBoost. They lose from 51 to
+100 cycles, where degradation is just starting (19 to 22 vs 15.7 to 17.5),
+and win again above 100 (12.4 vs 16.7 from 101 to 125, 20.0 vs 25.0 above
+the cap).
+Caveat: the late stage is 33 engines and wasn't in the pre-registered
+bootstrap, so I call it a consistent pattern across seeds, not a tested
+result.
+
+*Why is the Transformer's NASA score worse at the same RMSE?* It leans late:
+mean error +1.9 cycles, 11 predictions more than 20 cycles late vs 9 for
+XGBoost, and the score punishes late errors exponentially.
+
+*Did adding engineered features to the Transformer help?* Not on the test
+set: 15.92 vs 15.37, interval −0.2 to +1.3. It helped in CV only slightly,
+and that didn't carry over.
+
+*How do you compare with published work?* Against labels clipped at 125,
+our best four (residual hybrid 13.88, RF 14.02, XGBoost 14.08, Transformer
+14.31) rank 7th to 10th of 21, behind six published deep models from BLCNN
+(13.18) to GCU-Transformer (11.27).
+
+*Why were the saved predictions trained in parallel?* To finish in 7
+minutes instead of 30: one process per seed with 2 threads. A different
+thread count can change the last digits, which the notebook states.

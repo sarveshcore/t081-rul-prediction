@@ -1,0 +1,31 @@
+model,seed,best_epoch,seconds
+LSTM,42,11,15.8488450050354
+Temporal CNN,42,7,108.20996594429016
+Transformer,42,6,57.30184721946716
+"Hybrid, Transformer + features",42,26,123.64667105674744
+"Hybrid, LSTM + features",42,10,17.501731157302856
+"Residual hybrid, XGBoost + Transformer",42,6,51.288087129592896
+LSTM,43,6,12.059853792190552
+Temporal CNN,43,8,110.23278307914734
+Transformer,43,3,45.38481307029724
+"Hybrid, Transformer + features",43,14,80.84560894966125
+"Hybrid, LSTM + features",43,14,16.852346897125244
+"Residual hybrid, XGBoost + Transformer",43,13,78.81755018234253
+LSTM,44,12,16.308269023895264
+Temporal CNN,44,8,116.08955812454224
+Transformer,44,11,71.23773002624512
+"Hybrid, Transformer + features",44,16,85.43856501579285
+"Hybrid, LSTM + features",44,12,15.290692806243896
+"Residual hybrid, XGBoost + Transformer",44,2,44.170987129211426
+LSTM,45,13,17.19075107574463
+Temporal CNN,45,7,108.24922204017639
+Transformer,45,12,78.2903048992157
+"Hybrid, Transformer + features",45,24,114.71517634391785
+"Hybrid, LSTM + features",45,13,17.418122053146362
+"Residual hybrid, XGBoost + Transformer",45,13,58.58119797706604
+LSTM,46,13,17.12628412246704
+Temporal CNN,46,6,101.3409469127655
+Transformer,46,10,70.64749479293823
+"Hybrid, Transformer + features",46,10,68.04950094223022
+"Hybrid, LSTM + features",46,20,20.689977169036865
+"Residual hybrid, XGBoost + Transformer",46,15,83.51765584945679
