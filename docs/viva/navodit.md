@@ -604,8 +604,8 @@ the feature branch adds nothing measurable.
 ### Things I must check before the viva (Phase 2)
 - GCU-Transformer 11.27 against Mo et al. 2021 itself, if I get the PDF.
 - Zheng et al. 2017's training cap from the original paper, if I get it.
-- I present slides 1 to 3 of `slides/phase2_slides.pptx`: the question,
-  where Phase 1 left us, and the literature. Scripts and answers are in the
-  speaker notes. Rehearse with a timer: about 2 minutes 15 seconds.
-- Slide 11, the published comparison, is my work but Husain presents it.
-  Be ready for follow-up questions on it.
+- Who presents which slide of `slides/phase2_slides.pptx` can change, so
+  know every slide. Scripts, timings and likely questions are in the speaker
+  notes. My own work is on slides 1 to 3 (the question, where Phase 1 left
+  us, the literature) and 11 to 12 (the published comparison, the
+  conclusion); questions on those come to me whoever presents them.
