@@ -21,35 +21,50 @@ unknown point, and the true RUL is given only at their last observed cycle.
 We work on the FD001 subset, which has one operating condition and one
 fault mode.
 
-Our approach keeps the learners simple and puts the effort into the
-features and the protocol. From the 14 informative sensors in FD001 we
-compute, within each engine, rolling means, standard deviations and least
-squares slopes over three window lengths, and a health index learned by
-linear regression. Elastic Net, Random Forest and XGBoost are trained on
-RUL capped at 125 cycles and tuned with five-fold cross validation grouped
-by engine, so that no engine contributes rows to both sides of a split. The
-test set is used once, after every hyperparameter and the choice of model
-are frozen.
+The report asks one question: on this benchmark, can a network that learns
+from the raw sensor history match or beat features engineered by hand? We
+answer it in two phases under one protocol. In Phase 1, from the 14
+informative sensors in FD001, we compute within each engine rolling means,
+standard deviations and least squares slopes over three window lengths and
+a health index learned by linear regression, and train Elastic Net, Random
+Forest and XGBoost on them. In Phase 2, an LSTM, a temporal convolutional
+network and a Transformer encoder read 30-cycle windows of the same sensors
+directly, and two hybrids combine the windows with the engineered features.
+Every model is trained on RUL capped at 125 cycles and tuned with five-fold
+cross validation grouped by engine, so that no engine contributes rows to
+both sides of a split. The test set is used once per phase, after every
+hyperparameter and the choice of model are frozen.
 
 The contributions of this report are:
 \begin{itemize}
-\item an engine-level evaluation protocol for FD001 in which feature
-statistics are refitted inside every fold and the test set is scored once,
-with errors reported separately for engines near failure;
+\item an engine-level evaluation protocol for FD001 in which every scaler
+and feature statistic is refitted inside each fold, early stopping uses
+engines held out of the fold's training engines, and the test set is scored
+once, with errors reported separately for engines near failure;
 \item a comparison of three regressors on raw and engineered features,
 showing that the engineered features and the move from linear to tree
-models each improve the RMSE by several cycles, while the two tree
-ensembles cannot be separated;
-\item an analysis of what the tree ensembles rely on, using held-out
-grouped permutation importance and SHAP values, and a comparison of the
-test results with published FD001 models under matched label clipping.
+models each improve the RMSE by several cycles, and an analysis of what the
+tree ensembles rely on;
+\item three sequence networks and two hybrids evaluated under the same
+protocol over five seeds, showing that the selected Transformer ties
+XGBoost on engineered features on the test set, is more accurate close to
+failure, and is not improved by adding the engineered features;
+\item single-factor ablations of the window length, target cap,
+regularisation, inputs and hybrid branches, and a comparison of every model
+with published FD001 results under matched label clipping.
 \end{itemize}
 
 Section~\ref{sec:related} reviews prior work on C-MAPSS.
 Section~\ref{sec:data} describes the data and the choice of sensors and
 target cap, and Section~\ref{sec:evaluation} the evaluation protocol.
 Section~\ref{sec:features} defines the engineered features.
-Section~\ref{sec:models} covers the models, their tuning and what they rely
-on, and Section~\ref{sec:results} reports the test results.
-Section~\ref{sec:discussion} discusses the findings and their limits, and
-Section~\ref{sec:conclusion} concludes with the plan for sequence models.
+Section~\ref{sec:models} covers the classical models, their tuning and what
+they rely on, and Section~\ref{sec:results} reports their test results.
+Phase 2 begins with deep learning related work in
+Section~\ref{sec:dl-related}. Section~\ref{sec:dl-setup} describes the
+sensor windows and training protocol, Section~\ref{sec:dl-models} the
+sequence networks and Section~\ref{sec:hybrid} the hybrids.
+Section~\ref{sec:ablations} reports the dataset choices and ablations, and
+Section~\ref{sec:dl-results} the test results of every network against
+Phase 1. Section~\ref{sec:discussion} discusses the findings and their
+limits, and Section~\ref{sec:conclusion} concludes.

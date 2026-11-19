@@ -97,6 +97,19 @@ def test_best_weights_restored():
     assert history["val_loss"][history["best_epoch"]] == min(history["val_loss"])
 
 
+def test_restore_best_false_keeps_last_epoch_weights():
+    X, y = toy_data()
+    Xv, yv = toy_data(seed=1)
+    set_seed(42)
+    net = ToyLSTM()
+    history = fit_net(net, X, y, Xv, yv, epochs=20, lr=5e-2, batch_size=32, patience=20,
+                      restore_best=False)
+    assert len(history["val_loss"]) == 20
+    # The last epoch must not be the best one, or this would pass with the best weights too.
+    assert history["val_loss"][-1] > min(history["val_loss"])
+    assert mse(predict_net(net, Xv), yv) == pytest.approx(history["val_loss"][-1], rel=1e-4)
+
+
 def test_early_stopping_stops():
     X, y = toy_data()
     set_seed(42)

@@ -304,3 +304,306 @@ seeing the test set would bias the result.
   numbers and author names as `results/test_published_comparison.csv`.
 - The details of the other subsets (FD002 to FD004) in Saxena et al. 2008,
   in case we are asked why FD001.
+
+## Phase 2: deep learning literature
+
+Report: `report/sections/dl_related.tex` (Table `tab:dl-published`) and the
+Deep LSTM row of `tab:related`. Data: `results/dl_published.csv`, one row
+per published model with the source of every value in `values_from`. Test:
+`tests/test_literature.py`. Our own network numbers come from Husain's
+`results/dl_cv.csv` and `report/sections/dl_models.tex`.
+
+### My part in plain words
+
+Phase 2 trains networks that read raw sensor windows instead of our
+engineered features. My job was to review the three architectures we use
+(LSTM, TCN, Transformer), collect the deep models published on FD001, say
+what each architecture assumes about degradation data, and list where
+published numbers are scored differently from ours.
+
+- **The published deep results** go in a separate file,
+  `results/dl_published.csv`, not in the Phase 1 comparison. Adding rows to
+  the Phase 1 table would change the pool our "5th and 6th of 14" ranking is
+  counted from.
+- **Two values are weaker than the rest.** The GCU-Transformer RMSE of 11.27
+  comes from later papers' comparison tables, not from Mo et al. itself
+  (Sarvesh found a second, independent comparison that gives the same
+  number). Zheng et al.'s training cap could not be confirmed from the
+  original paper, so it is shown as `--` in both report tables.
+- **No source states whether its test labels were clipped** before scoring,
+  so `test_labels_capped` is "not stated" on every row.
+
+### The theory
+
+#### Why plain RNNs fail on long sequences, and the LSTM fix
+Backpropagation through time multiplies the gradient by the recurrent
+weights once per step it travels back. Over many steps it shrinks towards
+zero or blows up, so the network cannot learn links more than a few cycles
+apart. The LSTM (Hochreiter and Schmidhuber 1997) keeps a memory cell
+updated by *addition*, `c_t = f_t ⊙ c_{t-1} + i_t ⊙ g_t`, not by repeated
+multiplication. Gates decide what is written (`i_t`), read (`o_t`) and,
+with the forget gate added by Gers et al. (2000), kept (`f_t`). While the
+forget gate stays open, the error flows back through the cell unchanged.
+
+#### TCN: causal and dilated
+Bai et al. (2018). *Causal*: the output at cycle t uses only cycles up to
+t (left padding only). *Dilated*: with dilation d and kernel k, a filter
+reads t, t−d, …, t−(k−1)d. Doubling d each block makes the receptive field
+grow exponentially with depth while weights grow linearly. Ours (k = 3, two
+convolutions per block): `R = 1 + 2(k−1)(2^L − 1)`, so 29 cycles for 3
+blocks and 61 for 4. Three blocks miss one cycle of our 30-cycle window;
+four see all of it. Across many sequence tasks a generic TCN beat
+canonical LSTMs and GRUs.
+
+#### Transformer: self-attention
+Vaswani et al. (2017). Each position makes a query, key and value; its
+output is an average of all values weighted by how well its query matches
+each key. Any two cycles are one step apart, and all positions run in
+parallel. Attention ignores order, so a positional encoding is added (we
+use the sinusoidal one); without it a window and the same window shuffled
+give the same prediction. Cost grows with the square of the window length.
+
+#### What each architecture assumes about a degradation curve
+An FD001 trace is flat and noisy while healthy, then drifts as the
+compressor degrades.
+- **LSTM:** the useful history fits in a fixed-size state updated cycle by
+  cycle. Suits accumulating damage, but recent cycles tend to dominate.
+- **CNN/TCN:** useful patterns are local and look the same wherever they
+  occur (a rise, a step). That is what our Phase 1 rolling means and slopes
+  do by hand. Nothing outside the receptive field can matter.
+- **Transformer:** assumes nothing about locality or order; the structure
+  must be learned, and FD001 has only 100 training engines.
+
+### Published deep results on FD001
+
+From `results/dl_published.csv`. Values for the first group are as
+collected in Ragab et al. 2020, Table III; Chen et al. and DAST are from
+Zhang et al. 2022. `--` = not stated in the sources we checked.
+
+| Model | Window | Cap | RMSE | S |
+|---|---|---|---|---|
+| 2D CNN, Babu et al. 2016 | 15 | -- | 18.45 | 1287 |
+| Deep LSTM, Zheng et al. 2017 | -- | -- | 16.14 | 338 |
+| MODBNE, Zhang et al. 2017 | -- | -- | 15.04 | 334 |
+| CNN-LSTM, Wu et al. 2019 | -- | -- | 14.40 | 290 |
+| HDNN, Al-Dulaimi et al. 2019 | -- | -- | 13.02 | 245 |
+| ATS2S, Ragab et al. 2020 | 30 | 125 | 12.63 | 243 |
+| 1D CNN, Li et al. 2018 | 30 | 125 | 12.61 | 274 |
+| LSTM-attention + features, Chen et al. 2021 | 30 | -- | 14.53 | 322.44 |
+| GCU-Transformer, Mo et al. 2021 | -- | -- | 11.27 | -- |
+| DAST, Zhang et al. 2022 | 40 | 125 | 11.43 | 203.15 |
+
+The CSV also has LSTMBS (14.89), BiLSTM-ED (14.74) and BLCNN (13.18).
+
+### How our numbers compare
+
+**On cross validation** (`results/dl_cv.csv`, five engine folds, RUL capped
+at 125) the Transformer led:
+
+| Model | CV RMSE | Late RMSE (RUL ≤ 50) |
+|---|---|---|
+| Transformer | 13.28 ± 0.34 | 7.98 |
+| XGBoost, engineered (Phase 1) | 13.99 ± 0.46 | 9.88 |
+| LSTM | 14.02 ± 0.43 | 8.84 |
+| TCN | 15.91 ± 1.01 | 11.54 |
+
+**On the test set** (`results/dl_test_metrics.csv`, 100 engines, scored once,
+networks over 5 seeds, true RUL) the lead is gone:
+
+| Model | Test RMSE | Score S | Late RMSE |
+|---|---|---|---|
+| XGBoost (Phase 1, selected) | 15.36 | 389 | 7.03 |
+| Transformer (selected) | 15.37 ± 0.66 | 422 | 5.88 |
+| Residual hybrid | 15.13 ± 0.10 | 348 | 5.03 |
+| Two-branch hybrid | 15.92 ± 0.66 | 450 | 5.85 |
+| LSTM | 16.02 ± 0.67 | 622 | 6.21 |
+| TCN | 16.84 ± 0.93 | 584 | 8.10 |
+
+Transformer minus XGBoost, paired bootstrap over test engines
+(`results/dl_test_bootstrap.csv`): **−2.3 to +2.2 cycles, a tie.**
+
+**Against the published table** (`results/dl_test_published_comparison.csv`,
+labels clipped at 125, 21 rows): our best models rank 7th to 10th. Residual
+hybrid 13.88, Random Forest 14.02, XGBoost 14.08, Transformer 14.31. Six
+published deep models are ahead of all of them, from BLCNN (13.18) to
+GCU-Transformer (11.27).
+
+Why that comparison is only approximate:
+- **Test labels:** clipping at the cap moves our XGBoost from 15.36 to
+  14.08. No source we checked says which labels it scored.
+- **Cap and window:** 125 and 130, windows from 15 to 40 cycles. The
+  shortest test engine has 31 cycles, so a 40-cycle window (DAST) needs
+  padding or drops engines.
+- **Selection:** some papers report the best of several runs or don't say
+  how hyperparameters were chosen. Ours are chosen by CV on training engines.
+- **S is a sum over engines,** so only comparable on the same 100 engines.
+- **Transcribed values:** we copy numbers, often from another paper's table.
+
+So gaps under about one cycle of RMSE should not be read as meaningful.
+
+### 10 likely questions (Phase 2)
+
+**1. Why can't a plain RNN learn long-range dependencies, and how does the
+LSTM fix it?**
+Backpropagation through time multiplies the gradient by the recurrent
+weights once per step back, so it vanishes or explodes. The LSTM's cell
+state is updated by addition, and while the forget gate is open the error
+passes back unchanged, so a reading many cycles back can still change the
+weights.
+
+**2. What is a TCN's receptive field, and why use dilation?**
+The number of past cycles the last output can see. With kernel 3 and
+dilation doubling per block, ours is 1 + 2(k−1)(2^L − 1): 29 for 3 blocks,
+61 for 4. Dilation makes the field grow exponentially with depth while the
+number of weights grows only linearly.
+
+**3. Why does the Transformer need a positional encoding?**
+Self-attention (and our averaging of its outputs) ignores order, so without
+it a window and the same window shuffled give the same prediction; it
+couldn't tell a rising sensor from a falling one. The encoding gives each
+cycle a distinct code.
+
+**4. What is the best published deep result on FD001?**
+In our table the lowest RMSE is GCU-Transformer at 11.27, but that number
+is from later comparison tables, not the original paper. The best number
+reported in its own paper is DAST, 11.43 with S 203.15 (40-cycle windows,
+cap 125). Among the models collected by Ragab et al., 1D CNN 12.61 and
+ATS2S 12.63 lead.
+
+**5. Your Transformer gets 13.28. Is that worse than DAST's 11.43?**
+13.28 can't be compared with it: that's cross validation on training
+engines, and 11.43 is a test-set number. The comparable number is our test
+RMSE against labels clipped at 125, 14.31. That is about 3 cycles behind
+DAST, but the comparison is approximate, because DAST doesn't state whether
+its test labels were clipped and uses a 40-cycle window.
+
+**6. Why aren't published FD001 numbers directly comparable?**
+Test-label clipping (our XGBoost moves from 15.36 to 14.08), caps of 125 vs
+130, windows of 15 to 40 cycles (and what happens to short test engines),
+best-of-several-runs reporting, and transcription from other papers'
+tables. These effects are larger than many gaps between models.
+
+**7. Why a 30-cycle window?**
+Li et al., ATS2S and Chen et al. all use 30, and the shortest FD001 test
+engine has 31 cycles, so every test engine is scored on real history. A
+40-cycle window, as in DAST, would need padding or drop engines. The
+shortest training engine (128 cycles) is far longer than the window.
+
+**8. Why cap RUL at 125 for the networks too?**
+It follows the piecewise-linear target of Heimes (2008), with the value
+used for FD001 by Li et al., Ragab et al. and DAST. Keeping it also makes
+the networks comparable with our Phase 1 models.
+
+**9. Mo et al. and DAST say plain attention misses local structure. Does
+your data agree?**
+Not on FD001. Our plain Transformer has the lowest CV RMSE of our networks
+(13.28), and the TCN, which builds in exactly that local structure, is
+worst (15.91). The test set agrees: 15.37 against 16.84. Their gains may come from other parts of their
+models and training, so in the report we treat the argument as a
+hypothesis, not a finding.
+
+**10. Why are the published deep results in a separate file?**
+Our Phase 1 claim, 5th and 6th of 14 by RMSE, is counted against the
+comparison in `results/test_published_comparison.csv`. Adding newer models
+(GCU-Transformer, DAST, Chen et al.) to that table would change the pool and
+silently break the claim. Keeping `dl_published.csv` separate leaves Phase 1
+true as reported.
+
+### Phase 2 results questions
+
+**11. So did deep learning beat your Phase 1 model?**
+No, it tied. On the test set the Transformer scores 15.37 ± 0.66 against
+15.36 for XGBoost, and the bootstrap interval for the difference is −2.3 to
++2.2 cycles, centred on zero. Learning from raw sequences matches the
+engineered features on FD001 but does not beat them.
+
+**12. The Transformer led by 0.71 on CV. Why did that disappear?**
+Both CV scores are the best of 8 configurations on the same folds, so both
+are optimistic. The gap was close to the fold spread (0.34 and 0.46). The
+networks also trained on 64 engines per fold against 80 for XGBoost. The
+test set was never used for any choice, so it gives the honest ranking.
+
+**13. Then what did Phase 2 show?**
+Two things. The sensor history alone carries what our features compute by
+hand: with no cycle number and no features, the Transformer matches
+XGBoost, which scores 16.42 on CV without its features. And the two make
+different errors: within 25 cycles of failure the Transformer's RMSE is 2.5
+against 6.6, but between 51 and 100 cycles it is worse, 19 to 22 against
+15.7 to 17.5.
+
+**14. The residual hybrid has the lowest test RMSE. Why not choose it?**
+It wasn't the model chosen by cross validation. Picking it now, after seeing
+test scores, is exactly the bias we avoid. Its lead over XGBoost (−0.23,
+interval −1.14 to +0.77) is noise anyway.
+
+**15. Your ablation says a 50-cycle window is better. Why use 30?**
+30 was fixed before the test set was opened; the ablations ran afterwards.
+Switching now would be a choice made after seeing test results. The gain is
+real on CV: 11.34 against 13.00 in the same run, and still better on cycles
+≥ 50 where nothing is padded (11.96 against 14.19). The report lists it as
+a limitation and the first thing to change next time.
+
+**16. Does learning from sequences explain the gap to published models?**
+Phase 1 suggested our 20-cycle features caused the gap. Phase 2 tested
+that: a Transformer reading 30 raw cycles scores 14.31 against clipped
+labels, still behind the same six published models and even behind our own
+trees. So learning from the sequence alone did not close it in our setup.
+Protocol differences and window length likely explain part of it.
+
+### Report structure (Phase 2)
+
+25 pages, `report/main.pdf`, built from `report/main.tex`. Phase 2 sections
+follow the Phase 1 ones in this order:
+
+| Section | File | Owner |
+|---|---|---|
+| Deep Learning Related Work | `sections/dl_related.tex` | Navodit |
+| Deep Learning Setup | `sections/dl_setup.tex` | Sarvesh |
+| Sequence Models | `sections/dl_models.tex` | Husain |
+| Hybrid Architectures | `sections/hybrid.tex` | Aryan |
+| Dataset Choices and Ablation Studies | `sections/ablations.tex` | Trishit |
+| Deep Learning Test Results | `sections/dl_results.tex` | Sarvesh |
+| Abstract, Introduction, Discussion, Conclusion, Contributions | `main.tex`, `sections/*.tex` | Navodit |
+
+The title and abstract now ask one question, learned sequences against
+engineered features, and the conclusion answers it. Every number traces to a file in `results/`. Two diagrams span both columns
+because at one column their text printed at about 4 pt.
+
+### Teammates' Phase 2 areas, enough for cross-questions
+
+**Windows and test protocol (Sarvesh).** Each network reads the last 30
+cycles of 14 sensors. The first cycles are left-padded with the engine's
+first reading, so no false trend and no borrowing across engines. Per fold:
+64 engines fit, 16 choose the stopping epoch, 20 are scored; scalers fit on
+the 64 only. Outputs are multiplied by 125, so a new network only has to
+learn values near 1. On the test set every network is retrained on all 100
+training engines (80 fit, 20 early stopping) with seeds 42 to 46, and the
+bootstrap scores every seed on each resample of engines.
+
+**Sequence networks (Husain).** LSTM: 1 layer, hidden 32, dropout 0.3, 6,177
+parameters. TCN: 4 blocks, 64 channels, receptive field 61 cycles, 90,241
+parameters. Transformer: 1 layer, d = 64, 4 heads, 51,009 parameters. Each
+picked from 8 of 16 configurations by mean CV RMSE. The TCN overfits: after
+epoch 7 its training loss falls while its early-stopping loss rises.
+
+**Hybrids (Aryan).** Two-branch: a Transformer encodes the window, the 142
+engineered features at its last cycle are concatenated, then an MLP head
+(64 units, dropout 0.2). CV 13.47, test 15.92. Residual: XGBoost predicts,
+then a Transformer trained on XGBoost's in-sample residuals corrects it. CV
+13.49, test 15.13. Neither beats the Transformer alone on CV (13.28).
+
+**Dataset choices and ablations (Trishit).** Padded training windows: 1,400
+at w = 15, 2,900 at w = 30, 4,900 at w = 50, where 7 test engines are
+shorter than the window. The cap clips 38.9% of training labels. Each
+ablation is compared with a baseline from the same run, because thread count
+alone moves the baseline (13.00 default threads, 13.17 one thread, 13.28 in
+`dl_cv.csv`). 50-cycle window −1.66; no early stopping +2.48; no cap +2.25;
+dropout and weight decay within the fold spread; top 3 SHAP sensors +5.70;
+the feature branch adds nothing measurable.
+
+### Things I must check before the viva (Phase 2)
+- GCU-Transformer 11.27 against Mo et al. 2021 itself, if I get the PDF.
+- Zheng et al. 2017's training cap from the original paper, if I get it.
+- My slide scripts and answers are in the speaker notes of
+  `slides/phase2_slides.pptx`, slides 1 to 3 and 11 to 13. Rehearse them
+  with a timer: about 4 minutes in total.

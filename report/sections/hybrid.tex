@@ -34,14 +34,14 @@ computed by \texttt{make\_features} at the window's terminal cycle $t$ (cycle nu
 These features are standardised with the training fold's means and standard deviations,
 yielding $\mathbf{z}_{\mathrm{feat}} \in \mathbb{R}^{142}$.
 
-\begin{figure}[t]
+\begin{figure*}[t]
   \centering
-  \includegraphics[width=\columnwidth]{../figures/hybrid_architecture.png}
+  \includegraphics[width=0.8\textwidth]{../figures/hybrid_architecture.png}
   \caption{Two-branch hybrid architecture combining a 30-cycle sequence encoder
   with 142 engineered degradation features at the window's terminal cycle, followed
   by an MLP prediction head.}
   \label{fig:hybrid-arch}
-\end{figure}
+\end{figure*}
 
 The two representations are concatenated into a joint vector
 $[\mathbf{z}_{\mathrm{seq}}, \mathbf{z}_{\mathrm{feat}}] \in \mathbb{R}^{d + 142}$,
